@@ -7,10 +7,10 @@ spring:
         registration:
           keycloak:
             client-id: client1
-            client-secret: WX4ev44DH11s2gljSHxW1csn44Or3t19
+            client-secret: I0zblmakBIXNJd1MLbFcDBHq5ALLemAs
             scope: openid,profile,email
             authorization-grant-type: authorization_code
             redirect-uri: "http://localhost:8090/login/oauth2/code/keycloak"
         provider:
           keycloak:
-            issuer-uri: http://localhost:8080/realms/realm1
+            issuer-uri: http://100.72.130.7:8070/realms/realm1

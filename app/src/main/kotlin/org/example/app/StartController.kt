@@ -25,6 +25,10 @@ class StartController(
     fun hello(
     ): String = "Hello"
 
+    @GetMapping("/login/oauth2/code/keycloak")
+    fun redirect(
+    ): String = "redirected"
+
     @GetMapping("/home")
     fun getToken(
         @AuthenticationPrincipal principal: OAuth2User?,
