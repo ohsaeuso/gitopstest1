@@ -47,4 +47,9 @@ tasks.withType<Test> {
     useJUnitPlatform()
 }
 
+tasks.jar {
+    archiveFileName = "app.jar"
+}
+
+
 
