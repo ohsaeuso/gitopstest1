@@ -25,7 +25,7 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
 
     private fun fetchDynamicValue(username: String?): String {
 
-        val uri = URI("http://192.168.0.22:8090/users/$username")
+        val uri = URI("http://192.168.0.21:30089/users/$username")
 
         try{
             val stream = uri.toURL().openStream()
