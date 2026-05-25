@@ -48,8 +48,11 @@ tasks.withType<Test> {
 }
 
 tasks.jar {
-    archiveFileName = "app.jar"
+    enabled = false
 }
-
+tasks.bootJar {
+    archiveFileName = "app.jar"
+    enabled = true
+}
 
 
