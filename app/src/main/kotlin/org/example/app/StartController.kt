@@ -7,7 +7,7 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
 import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken
 import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.web.bind.annotation.GetMapping
-import org.springframework.web.bind.annotation.RequestParam
+import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
 import kotlin.math.roundToInt
 
@@ -16,9 +16,9 @@ import kotlin.math.roundToInt
 class StartController(
     private val  clientService : OAuth2AuthorizedClientService
 ) {
-    @GetMapping("/users/$username")
+    @GetMapping("/users/{username}")
     fun username(
-        @PathVariable(value = "username", defaultValue = "World") username: String,
+        @PathVariable("username") username: String,
     ): String = "Hello, ${Math.random().roundToInt()}-$username!"
 
     @GetMapping("/hello")
