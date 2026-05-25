@@ -9,7 +9,7 @@ replicaCount: 2
 image:
   repository: 192.168.0.22:5000/gitopstest1
   # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
+  #pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   tag: latest
 
