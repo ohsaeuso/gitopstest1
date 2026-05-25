@@ -10,11 +10,12 @@ RUN chmod +x gradlew && \
     ls -l /app/app/build/libs
 
 # 런타임 스테이지
-FROM amazonlinux:2023
+FROM ubuntu:22.04
 
-# Java + bash + curl 설치
-RUN dnf install -y java-21-amazon-corretto-headless bash curl && \
-    dnf clean all
+# bash + curl + Java 설치
+RUN apt-get update && \
+    apt-get install -y bash curl openjdk-21-jre-headless && \
+    apt-get clean
 
 WORKDIR /app
 
