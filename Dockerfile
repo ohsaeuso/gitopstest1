@@ -11,6 +11,9 @@ RUN chmod +x gradlew && \
 
 # 🚀 Runtime Stage
 FROM amazoncorretto:21
+
+RUN apt-get update && apt-get install -y bash curl && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # 빌드된 JAR 파일 복사
