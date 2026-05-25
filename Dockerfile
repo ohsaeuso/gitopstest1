@@ -9,10 +9,12 @@ RUN chmod +x gradlew && \
     ./gradlew :app:build -x test --no-daemon && \
     ls -l /app/app/build/libs
 
-# 🚀 Runtime Stage
-FROM amazoncorretto:21
+# 런타임 스테이지
+FROM amazonlinux:2023
 
-RUN apt-get update && apt-get install -y bash curl && rm -rf /var/lib/apt/lists/*
+# Java + bash + curl 설치
+RUN dnf install -y java-21-amazon-corretto-headless bash curl && \
+    dnf clean all
 
 WORKDIR /app
 
