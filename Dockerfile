@@ -26,4 +26,4 @@ ENV JAVA_OPTS="-Djavax.net.ssl.trustStore=/app/app/truststore.jks \
                -Djavax.net.ssl.trustStorePassword=changeit"
 
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
