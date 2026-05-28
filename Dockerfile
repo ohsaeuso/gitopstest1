@@ -22,5 +22,8 @@ WORKDIR /app
 # 빌드된 JAR 파일 복사
 COPY --from=builder /app/app/build/libs/app.jar app.jar
 
+ENV JAVA_OPTS="-Djavax.net.ssl.trustStore=/app/app/truststore.jks \
+               -Djavax.net.ssl.trustStorePassword=changeit"
+
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "$JAVA_OPTS", "-jar", "app.jar"]
