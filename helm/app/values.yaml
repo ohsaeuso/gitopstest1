@@ -128,3 +128,8 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+hostAliases:
+  ip: 100.101.36.62
+  hostnames: keycloak.external.com
+
