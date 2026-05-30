@@ -19,11 +19,11 @@ RUN apt-get update && \
 
 WORKDIR /app
 
+RUN keytool -import -trustcacerts -alias "nginx" -file "/app/app/nginx.crt" -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass changeit
+
+
 # 빌드된 JAR 파일 복사
 COPY --from=builder /app/app/build/libs/app.jar app.jar
 
-ENV JAVA_OPTS="-Djavax.net.ssl.trustStore=/app/app/truststore.jks \
-               -Djavax.net.ssl.trustStorePassword=changeit"
-
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
