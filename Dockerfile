@@ -19,9 +19,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-RUN echo `ls /app`
-RUN echo $JAVA_HOME
-RUN keytool -import -trustcacerts -alias "nginx" -file "/app/nginx.crt" -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass changeit
+COPY --from=builder /app/app/nginx.crt nginx.crt
+RUN keytool -import -trustcacerts -alias "nginx" -file "nginx.crt" -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass changeit
 
 
 # 빌드된 JAR 파일 복사
