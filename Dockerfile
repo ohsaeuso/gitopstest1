@@ -19,7 +19,8 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-RUN ls /app
+RUN echo `ls /app`
+RUN echo $JAVA_HOME
 RUN keytool -import -trustcacerts -alias "nginx" -file "/app/nginx.crt" -keystore "$JAVA_HOME/jre/lib/security/cacerts" -storepass changeit
 
 
