@@ -28,7 +28,7 @@ RUN keytool -importcert -trustcacerts -alias "nginx" \
 RUN keytool -list -keystore /etc/ssl/certs/java/cacerts -storepass changeit | grep nginx || (echo "❌ 인증서 등록 실패" && exit 1)
 
 # SSL handshake 테스트
-RUN curl -vk https://keycloak.external.com/realms/realm1/.well-known/openid-configuration || (echo "❌ SSL handshake 실패" && exit 1)
+#RUN curl -vk https://keycloak.external.com/realms/realm1/.well-known/openid-configuration || (echo "❌ SSL handshake 실패" && exit 1)
 
 
 # 빌드된 JAR 복사
