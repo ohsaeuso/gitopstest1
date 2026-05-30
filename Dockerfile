@@ -21,11 +21,11 @@ COPY --from=builder /app/app/nginx.crt nginx.crt
 # truststore 등록
 RUN keytool -importcert -trustcacerts -alias "nginx" \
     -file "nginx.crt" \
-    -keystore "$JAVA_HOME/conf/security/cacerts" \
+    -keystore "$JAVA_HOME/lib/security/cacerts" \
     -storepass changeit -noprompt
 
 # 등록 확인
-RUN keytool -list -keystore $JAVA_HOME/conf/security/cacerts -storepass changeit | grep nginx || (echo "❌ 인증서 등록 실패" && exit 1)
+RUN keytool -list -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit | grep nginx || (echo "❌ 인증서 등록 실패" && exit 1)
 
 # SSL handshake 테스트
 RUN curl -vk https://keycloak.external.com/realms/realm1/.well-known/openid-configuration || (echo "❌ SSL handshake 실패" && exit 1)
