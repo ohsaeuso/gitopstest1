@@ -10,7 +10,7 @@ RUN chmod +x gradlew && \
 FROM ubuntu:22.04
 
 RUN apt-get update && \
-    apt-get install -y bash curl openjdk-21-jre-headless openssl dnsutils && \
+    apt-get install -y bash curl openjdk-21-jdk-headless openssl dnsutils && \
     apt-get clean
 
 WORKDIR /app
