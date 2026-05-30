@@ -15,21 +15,21 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# 🔑 1. 인증서 체인 추출 (self-signed 포함)
-RUN echo | openssl s_client -showcerts -connect keycloak.external.com:443 -servername keycloak.external.com \
-    | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > fullchain.crt
+# crt 파일 준비 (이미 추출한 nginx.crt를 COPY)
+COPY --from=builder /app/app/nginx.crt nginx.crt
 
-# 🔑 2. truststore에 등록
-RUN keytool -importcert -trustcacerts -alias "keycloak" \
-    -file "fullchain.crt" \
+# truststore 등록
+RUN keytool -importcert -trustcacerts -alias "nginx" \
+    -file "nginx.crt" \
     -keystore "$JAVA_HOME/lib/security/cacerts" \
     -storepass changeit -noprompt
 
-# 🔍 3. 등록 확인
-RUN keytool -list -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit | grep keycloak || (echo "❌ 인증서 등록 실패" && exit 1)
+# 등록 확인
+RUN keytool -list -keystore $JAVA_HOME/lib/security/cacerts -storepass changeit | grep nginx || (echo "❌ 인증서 등록 실패" && exit 1)
 
-# 🔍 4. OIDC 엔드포인트 SSL 테스트
+# SSL handshake 테스트
 RUN curl -vk https://keycloak.external.com/realms/realm1/.well-known/openid-configuration || (echo "❌ SSL handshake 실패" && exit 1)
+
 
 # 빌드된 JAR 복사
 COPY --from=builder /app/app/build/libs/app.jar app.jar
