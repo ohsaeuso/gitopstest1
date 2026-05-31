@@ -4,8 +4,8 @@ plugins {
     id("buildsrc.convention.kotlin-jvm")
     // Apply Kotlin Serialization plugin from `gradle/libs.versions.toml`.
     alias(libs.plugins.kotlinPluginSerialization)
-    id("org.springframework.boot") version "3.2.5"
-    id("io.spring.dependency-management") version "1.1.3"
+    //id("org.springframework.boot") version "3.2.5"
+    //id("io.spring.dependency-management") version "1.1.3"
 }
 
 dependencies {
@@ -20,7 +20,7 @@ version="1.0.0"
 dependencies {
 
     // OAuth2 Client (Keycloak 연동)
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    //implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // Keycloak SPI 의존성
     implementation("org.keycloak:keycloak-core:26.2.4")
@@ -51,9 +51,6 @@ tasks.jar {
     }
 }
 
-tasks.bootJar{
-    enabled = false
-}
 
 java {
     toolchain {
