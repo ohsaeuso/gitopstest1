@@ -28,7 +28,7 @@ dependencies {
     implementation("org.keycloak:keycloak-server-spi-private:26.2.4")
     implementation("org.keycloak:keycloak-services:26.2.4")
 
-    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    //implementation("org.jetbrains.kotlin:kotlin-stdlib")
 
 }
 
@@ -49,12 +49,16 @@ tasks.jar {
             "Implementation-Version" to version
         )
     }
+
+    archiveFileName.set("dynamic-claim-mapper.jar")
+
+    exclude("META-INF/*.kotlin_module")
 }
 
 
 java {
     toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17)) // Keycloak 서버 버전에 맞춤
+        languageVersion.set(JavaLanguageVersion.of(17))
     }
 }
 
