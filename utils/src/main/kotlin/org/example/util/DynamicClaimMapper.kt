@@ -59,4 +59,7 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
         return OIDCLoginProtocol.LOGIN_PROTOCOL
     }
 
-}
+        override fun getPriority(): Int = 0
+
+
+    }
