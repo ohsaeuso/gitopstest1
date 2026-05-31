@@ -23,10 +23,10 @@ dependencies {
     //implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // Keycloak SPI 의존성
-    implementation("org.keycloak:keycloak-core:24.0.4")
-    implementation("org.keycloak:keycloak-server-spi:24.0.4")
-    implementation("org.keycloak:keycloak-server-spi-private:24.0.4")
-    implementation("org.keycloak:keycloak-services:24.0.4")
+    implementation("org.keycloak:keycloak-core:26.2.4")
+    implementation("org.keycloak:keycloak-server-spi:26.2.4")
+    implementation("org.keycloak:keycloak-server-spi-private:26.2.4")
+    implementation("org.keycloak:keycloak-services:26.2.4")
 
     //implementation("org.jetbrains.kotlin:kotlin-stdlib")
 

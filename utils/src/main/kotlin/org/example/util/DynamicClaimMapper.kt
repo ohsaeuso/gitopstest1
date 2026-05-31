@@ -23,9 +23,9 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
         session: KeycloakSession?, userSession: UserSessionModel,
         clientSessionCtx: ClientSessionContext?
     ): AccessToken {
-        val baseUrl = mappingModel?.getConfig()?.get(CONFIG_BASE_URL) ?: DEFAULT_BASE_URL
+        val baseUrl = DEFAULT_BASE_URL
         val dynamicValue: String = fetchDynamicValue(userSession.user.username, baseUrl)
-        token.getOtherClaims()["customAttr"] = dynamicValue
+        token.getOtherClaims()["department_code"] = dynamicValue
         return token
     }
 
@@ -42,30 +42,18 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
 
     companion object {
         const val PROVIDER_ID: String = "dynamic-claim-mapper"
-        const val CONFIG_BASE_URL: String = "userServiceBaseUrl"
         const val DEFAULT_BASE_URL: String = "http://worker1:30089"
     }
 
     override fun getDisplayCategory(): String = TOKEN_MAPPER_CATEGORY
 
-    override fun getDisplayType(): String = "My Dynamic Claim Mapper"
+    override fun getDisplayType(): String = "Dynamic Claim Mapper"
 
     override fun getId(): String = PROVIDER_ID
 
     override fun getHelpText(): String = "Adds a dynamic custom claim to the Access Token."
 
-    // 이제 Keycloak Admin Console에서 클라이언트 → Mappers → Dynamic Claim Mapper 추가 시
-    // User Service Base URL 필드가 표시되어 환경별로 다른 URL을 입력할 수 있습니다. 서버 설정이나 환경변수 주입 없이
-    // UI에서만 관리 가능합니다.
-    override fun getConfigProperties(): List<ProviderConfigProperty> = mutableListOf(
-        ProviderConfigProperty().apply {
-            name = CONFIG_BASE_URL
-            label = "User Service Base URL"
-            helpText = "Base URL of the user service (e.g. http://my-service:8080)"
-            type = ProviderConfigProperty.STRING_TYPE
-            defaultValue = DEFAULT_BASE_URL
-        }
-    )
+    override fun getConfigProperties(): List<ProviderConfigProperty> = mutableListOf()
 
     override fun getProtocol(): String {
         return OIDCLoginProtocol.LOGIN_PROTOCOL
