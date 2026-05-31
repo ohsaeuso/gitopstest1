@@ -19,7 +19,9 @@ class StartController(
     @GetMapping("/users/{username}/departments")
     fun username(
         @PathVariable("username") username: String,
-    ): String = "${Math.random().roundToInt()}-$username!"
+    ): String {
+        println("/users/$username/departments called")
+        return "${Math.random().roundToInt()}-$username!"}
 
     @GetMapping("/users/{username}/groups")
     fun usernames(

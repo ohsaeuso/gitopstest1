@@ -4,14 +4,18 @@ import org.keycloak.models.ClientSessionContext
 import org.keycloak.models.KeycloakSession
 import org.keycloak.models.ProtocolMapperModel
 import org.keycloak.models.UserSessionModel
+import org.keycloak.protocol.oidc.OIDCLoginProtocol
 import org.keycloak.protocol.oidc.mappers.AbstractOIDCProtocolMapper
 import org.keycloak.protocol.oidc.mappers.OIDCAccessTokenMapper
+import org.keycloak.protocol.oidc.mappers.OIDCIDTokenMapper
+import org.keycloak.protocol.oidc.mappers.UserInfoTokenMapper
 import org.keycloak.provider.ProviderConfigProperty
 import org.keycloak.representations.AccessToken
 import java.net.URI
 
+
 class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
-   OIDCAccessTokenMapper
+   OIDCAccessTokenMapper, OIDCIDTokenMapper, UserInfoTokenMapper
     {
 
     override fun transformAccessToken(
@@ -42,9 +46,9 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
         const val DEFAULT_BASE_URL: String = "http://worker1:30089"
     }
 
-    override fun getDisplayCategory(): String = "Token Mapper"
+    override fun getDisplayCategory(): String = TOKEN_MAPPER_CATEGORY
 
-    override fun getDisplayType(): String = "Dynamic Claim Mapper"
+    override fun getDisplayType(): String = "My Dynamic Claim Mapper"
 
     override fun getId(): String = PROVIDER_ID
 
@@ -62,5 +66,9 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
             defaultValue = DEFAULT_BASE_URL
         }
     )
+
+    override fun getProtocol(): String {
+        return OIDCLoginProtocol.LOGIN_PROTOCOL
+    }
 
 }
