@@ -20,6 +20,8 @@ open class SecurityConfig {
             http {
                 authorizeHttpRequests {
                     authorize("/", permitAll)
+                    authorize("/hello", permitAll)
+                    authorize("/users/**", permitAll)
                     authorize("/public/**", permitAll)
                     authorize(anyRequest, authenticated)
                 }

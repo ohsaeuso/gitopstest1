@@ -16,10 +16,15 @@ import kotlin.math.roundToInt
 class StartController(
     private val  clientService : OAuth2AuthorizedClientService
 ) {
-    @GetMapping("/users/{username}")
+    @GetMapping("/users/{username}/departments")
     fun username(
         @PathVariable("username") username: String,
-    ): String = "Hello, ${Math.random().roundToInt()}-$username!"
+    ): String = "${Math.random().roundToInt()}-$username!"
+
+    @GetMapping("/users/{username}/groups")
+    fun usernames(
+        @PathVariable("username") username: String,
+    ) = listOf("123", "456")
 
     @GetMapping("/hello")
     fun hello(
