@@ -43,4 +43,4 @@ bin/
 
 logs
 
-app/app.http
+http
