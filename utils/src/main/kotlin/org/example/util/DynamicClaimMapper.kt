@@ -19,7 +19,7 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(), OIDCAccessTokenMapper, 
         val baseUrl = DEFAULT_BASE_URL
         val dynamicValue: String = fetchDynamicValue(userSession.user.username, baseUrl)
         token.getOtherClaims()["department_code"] = dynamicValue
-        OIDCAttributeMapperHelper.mapClaim(token, mappingModel, mapOf("department_code" to dynamicValue))
+        OIDCAttributeMapperHelper.mapClaim(token, mappingModel, listOf(dynamicValue))
 
     }
 
