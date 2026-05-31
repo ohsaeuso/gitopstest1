@@ -1,5 +1,0 @@
-{
-  "spi": "protocol-mapper",
-  "provider": "dynamic-claim-mapper",
-  "enabled": true
-}
