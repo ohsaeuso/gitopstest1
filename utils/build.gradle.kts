@@ -20,7 +20,7 @@ version="1.0.0"
 dependencies {
 
     // OAuth2 Client (Keycloak 연동)
-    //implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
+    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
 
     // Keycloak SPI 의존성
     implementation("org.keycloak:keycloak-core:26.2.4")
@@ -28,7 +28,7 @@ dependencies {
     implementation("org.keycloak:keycloak-server-spi-private:26.2.4")
     implementation("org.keycloak:keycloak-services:26.2.4")
 
-    //implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
 
 }
 

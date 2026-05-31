@@ -19,9 +19,9 @@ class DynamicClaimMapper : AbstractOIDCProtocolMapper(),
     {
 
     override fun transformAccessToken(
-        token: AccessToken, mappingModel: ProtocolMapperModel?,
-        session: KeycloakSession?, userSession: UserSessionModel,
-        clientSessionCtx: ClientSessionContext?
+        token: AccessToken, mappingModel: ProtocolMapperModel,
+        session: KeycloakSession, userSession: UserSessionModel,
+        clientSessionCtx: ClientSessionContext
     ): AccessToken {
         val baseUrl = DEFAULT_BASE_URL
         val dynamicValue: String = fetchDynamicValue(userSession.user.username, baseUrl)
