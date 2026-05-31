@@ -51,6 +51,10 @@ tasks.jar {
     }
 }
 
+tasks.bootJar{
+    enabled = false
+}
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(17)) // Keycloak 서버 버전에 맞춤
