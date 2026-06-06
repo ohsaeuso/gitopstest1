@@ -22,9 +22,10 @@ dependencies {
 
     implementation(project(":utils"))
 
-    // JUnit 5 테스트 의존성
-    testImplementation("org.junit.jupiter:junit-jupiter")
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:junit-jupiter")
+    testImplementation("org.testcontainers:oracle-free")
 }
 
 application {
