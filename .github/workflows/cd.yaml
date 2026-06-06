@@ -55,8 +55,8 @@ jobs:
 
       - name: Configure Git auth
         run: |
-          git config --global user.name "ohsaesoso"
-          git config --global user.email "ohsaeuso@gmail.com"
+          git config --local user.name "ohsaeuso"
+          git config --local user.email "ohsaeuso@gmail.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
       - name: Update image tag and push
