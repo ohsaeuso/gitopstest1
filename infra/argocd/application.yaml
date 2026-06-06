@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gitopstest1-api
+  namespace: argocd
+spec:
+  project: gitopstest1
+  source:
+    repoURL: https://github.com/example/ecommerce-deployment
+    targetRevision: main
+    path: overlays/staging
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gitopstest1
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

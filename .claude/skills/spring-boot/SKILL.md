@@ -2,7 +2,7 @@
 
 ## Pinned versions
 - Spring Boot **3.5.x** (do not migrate to 4.x without architectural approval).
-- Java **21 LTS** with virtual threads enabled.
+- Kotlin **2.2.0** with virtual threads enabled.
 - `spring.threads.virtual.enabled=true` in `application.yml`.
 
 ## Stereotypes - which annotation to use
@@ -13,22 +13,7 @@
 - `@Component` → generic. **Avoid** if one of the above fits.
 
 ## Dependency injection
-​```java
-// ✅ CORRECT - constructor injection (final fields)
-@Service
-public class CartService {
-    private final CartRepository cartRepository;
-    private final ProductService productService;
-    public CartService(CartRepository cartRepository, ProductService productService) {
-        this.cartRepository = cartRepository;
-        this.productService = productService;
-    }
-}
-// ❌ WRONG - @Autowired on field
-@Service
-public class CartService {
-    @Autowired private CartRepository cartRepository;  // don't do this
-}
-​```
-Lombok `@RequiredArgsConstructor` is accepted to reduce boilerplate.
+- ✅ CORRECT - constructor injection (final fields)
+- ❌ WRONG - @Autowired on field
+
 [continues with exception handling, validation, properties, actuator…]

@@ -73,8 +73,8 @@ jobs:
 
       - name: Configure Git auth
         run: |
-          git config --global user.name "ohsaeudev"
-          git config --global user.email "ohsaeudev@gmail.com"
+          git config --global user.name "ohsaeuso"
+          git config --global user.email "ohsaeuso@gmail.com"
           git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
 
       - name: Update Helm chart and push

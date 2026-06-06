@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+env:
+  JAVA_VERSION: '21'
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: temurin
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Build & unit tests
+        run: ./gradlew test
+
+      - name: Integration tests (Testcontainers)
+        run: ./gradlew integrationTest
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: app/build/reports/jacoco/test/jacocoTestReport.xml
+
+      - name: Build container image
+        if: github.event_name == 'pull_request'
+        run: ./gradlew bootBuildImage
+
+  notify-claude:
+    needs: build-and-test
+    if: failure() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment failure on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `❌ CI failed. Paste the output into Claude Code with:\n\n` +
+              `\`/ci-fix ${context.runId}\`\n\n` +
+              `Logs: ${context.payload.repository.html_url}/actions/runs/${context.runId}`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
