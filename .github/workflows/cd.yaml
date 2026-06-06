@@ -1,0 +1,68 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [master]
+
+jobs:
+  detect-changes:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: self-hosted
+    outputs:
+      should_deploy_app: ${{ steps.filter.outputs.should_deploy_app }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect changed top-level modules
+        id: filter
+        run: |
+          if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          elif [ "${{ github.event.workflow_run.head_sha }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED=$(git diff --name-only ${{ github.event.before }} ${{ github.event.workflow_run.head_sha }} | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          else
+            CHANGED=$(git show --name-only --pretty=format: ${{ github.event.workflow_run.head_sha }} | cut -d/ -f1 | sort -u | tr '\n' ' ')
+          fi
+
+          if [ -z "$CHANGED" ] || [ "$CHANGED" = " " ]; then
+            CHANGED="app utils"
+          fi
+
+          if echo "$CHANGED" | grep -q -E "(app|utils)"; then
+            echo "should_deploy_app=true" >> $GITHUB_OUTPUT
+          else
+            echo "should_deploy_app=false" >> $GITHUB_OUTPUT
+          fi
+
+  deploy-app:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_deploy_app == 'true'
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+          docker build -f Dockerfile -t 192.168.0.22:5000/gitopstest1:$IMAGE_TAG .
+          docker push 192.168.0.22:5000/gitopstest1:$IMAGE_TAG
+
+      - name: Configure Git auth
+        run: |
+          git config --global user.name "ohsaesoso"
+          git config --global user.email "ohsaeuso@gmail.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
+
+      - name: Update image tag and push
+        run: |
+          IMAGE_TAG=${{ github.event.workflow_run.head_sha }}
+          sed -i "s/tag:.*/tag: $IMAGE_TAG/" helm/app/values.yaml
+          git add helm/app/values.yaml
+          git commit -m "chore: update app image tag to $IMAGE_TAG"
+          git push

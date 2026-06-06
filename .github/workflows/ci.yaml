@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [master, develop]
   push:
-    branches: [main]
+    branches: [master]
 
 env:
   JAVA_VERSION: '21'
@@ -37,10 +37,6 @@ jobs:
         with:
           files: app/build/reports/jacoco/test/jacocoTestReport.xml
 
-      - name: Build container image
-        if: github.event_name == 'pull_request'
-        run: ./gradlew bootBuildImage
-
   notify-claude:
     needs: build-and-test
     if: failure() && github.event_name == 'pull_request'
@@ -59,3 +55,4 @@ jobs:
               repo: context.repo.repo,
               body
             });
+
