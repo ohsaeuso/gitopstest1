@@ -11,20 +11,20 @@ You will monitor the deploy of **$ARGUMENTS** and report status in real time.
     - dev → ecommerce-api-dev
 
 2. **Sync polling** (5min timeout):
-   ​```bash
+   ```bash
    argocd app wait gitopstest1-app --sync --timeout 300
-   ​```
+   ```
 
 3. **Check pod health:**
-   ​```bash
+   ```bash
    kubectl -n gitopstest1 get pods -l app=gitopstest1-app
    kubectl -n gitopstest1 logs -l app=gitopstest1-app --tail=50
-   ​```
+   ```
 
 4. **Smoke test on health endpoint:**
-   ​```bash
+   ```bash
    curl https://api-staging.example.com/actuator/health
-   ​```
+   ```
 
 5. **Report:**
     - Final deploy status (Synced / Failed / OutOfSync)

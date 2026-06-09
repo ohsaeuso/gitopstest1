@@ -7,9 +7,9 @@ allowed-tools: Bash(gh:*), Bash(git:*), Bash(./mvnw:*)
 Run **$ARGUMENTS** of GitHub Actions failed. Let's diagnose and fix it.
 
 1. **Fetch the run logs:**
-   ​```bash
+   ```bash
    gh run view $ARGUMENTS --log-failed
-   ​```
+   ```
 
 2. **Identify the failure type:**
     - Compilation failure → read the class and compiler message

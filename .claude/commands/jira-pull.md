@@ -17,9 +17,9 @@ Run these steps in order, no skipping:
 3. **Move the issue to "In Progress"** via MCP. Add a short comment:
    `Starting development via Claude Code.`
 4. **Create the branch** following the CLAUDE.md convention:
-   ​```
+   ```
    git checkout -b feat/$ARGUMENTS-<title-slug>
-   ​```
+   ```
 5. **Generate a technical plan** in `/tmp/plan-$ARGUMENTS.md` containing:
     - Summary of what needs to be done (2-3 paragraphs)
     - Files to create/modify (list)
