@@ -43,7 +43,4 @@ bin/
 
 logs
 
-# MCP config (contains credentials)
-.mcp.json
-
 http/
