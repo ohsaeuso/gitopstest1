@@ -13,7 +13,6 @@ Integrates with Oracle 23.
 
 ## Code conventions
 - Root package: `com.example.task`.
-- Layers: `controller` (REST) → `service` (rules) → `repository` (JPA).
 - REST endpoints follow `/api/v1/{resource}`. Version in URL, not header.
 - Errors: throw domain exceptions extending `DomainException` in `domain.exception`.
   A `@RestControllerAdvice` in `config.GlobalExceptionHandler` converts to RFC 7807.
