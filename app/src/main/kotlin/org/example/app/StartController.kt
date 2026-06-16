@@ -1,6 +1,6 @@
 package org.example.app
 
-
+import org.example.app.service.UserAccessService
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService
@@ -14,7 +14,8 @@ import kotlin.math.roundToInt
 
 @RestController
 class StartController(
-    private val  clientService : OAuth2AuthorizedClientService
+    private val  clientService : OAuth2AuthorizedClientService,
+    private val userAccessService: UserAccessService,
 ) {
     @GetMapping("/users/{username}/departments")
     fun username(
@@ -22,6 +23,14 @@ class StartController(
     ): String {
         println("/users/$username/departments called")
         return "${Math.random().roundToInt()}-$username!"}
+
+    @GetMapping("/users/{username}/access")
+    fun recordAccess(
+        @PathVariable username: String,
+    ): String {
+        userAccessService.recordAccess(username)
+        return "access event published for $username"
+    }
 
     @GetMapping("/users/{username}/groups")
     fun usernames(

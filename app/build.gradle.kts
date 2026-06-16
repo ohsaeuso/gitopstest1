@@ -7,6 +7,12 @@ plugins {
 
 version="1.0.0"
 
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.modulith:spring-modulith-bom:1.1.6")
+    }
+}
+
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
@@ -23,6 +29,8 @@ dependencies {
     implementation(project(":utils"))
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework:spring-jdbc")
+    testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:oracle-free")
