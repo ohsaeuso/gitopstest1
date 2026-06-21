@@ -32,7 +32,6 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework:spring-jdbc")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
-  //  testImplementation("org.springframework.boot:spring-boot-testcontainers")
     testImplementation("org.testcontainers:testcontainers:2.0.2") // Spring Boot BOM 관리 버전(1.x)은 Docker 29에서 400 에러 발생 — 버전 명시 필수
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:oracle-free")
