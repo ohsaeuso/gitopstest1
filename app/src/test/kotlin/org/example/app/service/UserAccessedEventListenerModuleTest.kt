@@ -1,6 +1,7 @@
 package org.example.app.service
 
 import org.assertj.core.api.Assertions.assertThat
+import org.example.app.IntegrationTestBase
 import org.example.app.event.UserAccessedEvent
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -10,15 +11,13 @@ import java.util.function.Consumer
 
 
 @ApplicationModuleTest
-class UserAccessedEventListenerModuleTest {
+class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
 
     @Autowired
     private val userAccessService: UserAccessService? = null
 
     @Autowired
     private val userAccessAuditService: UserAccessAuditService? = null
-
-    // https://www.baeldung.com/spring-test-application-events
 
     @Test
     fun whenRecordAccess_thenUserAccessAuditServiceAudit(scenario: Scenario) {
@@ -30,4 +29,5 @@ class UserAccessedEventListenerModuleTest {
                     .hasFieldOrProperty("timestamp")
             })
     }
+
 }
