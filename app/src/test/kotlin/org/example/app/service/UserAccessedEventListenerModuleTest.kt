@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.modulith.test.ApplicationModuleTest
 import org.springframework.modulith.test.Scenario
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import java.util.function.Consumer
 
 
@@ -16,18 +17,27 @@ class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
     @Autowired
     private val userAccessService: UserAccessService? = null
 
-    @Autowired
+    //@Autowired
+    @MockitoBean
     private val userAccessAuditService: UserAccessAuditService? = null
 
     @Test
     fun whenRecordAccess_thenUserAccessAuditServiceAudit(scenario: Scenario) {
-        scenario.stimulate(Runnable { userAccessService?.recordAccess("customer-1") })
+        scenario.stimulate( { userAccessService?.recordAccess("customer-1") })
             .andWaitForEventOfType(UserAccessedEvent::class.java)
-            .toArriveAndVerify(Consumer { evt: UserAccessedEvent? ->
+            .toArriveAndVerify( { evt: UserAccessedEvent? ->
                 assertThat(evt)
                     .hasFieldOrPropertyWithValue("username", "customer-1")
                     .hasFieldOrProperty("timestamp")
             })
+    }
+
+    @Test
+    fun whenReceivingPublishOrderCompletedEvent_thenRewardCustomerWithLoyaltyPoints(scenario: Scenario) {
+        scenario.publish(UserAccessedEvent("customer-1" ))
+            .andWaitForStateChange{
+                userAccessAuditService?.audit("customer-1")
+            }
     }
 
 }
