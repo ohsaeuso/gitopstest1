@@ -16,8 +16,7 @@ class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
     @Autowired
     private val userAccessService: UserAccessService? = null
 
-    //@Autowired
-    @MockitoBean
+    @Autowired
     private val userAccessAuditService: UserAccessAuditService? = null
 
     @Test
