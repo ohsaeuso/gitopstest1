@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.modulith.test.ApplicationModuleTest
 import org.springframework.modulith.test.Scenario
 import org.springframework.test.context.bean.override.mockito.MockitoBean
-import java.util.function.Consumer
 
 
 @ApplicationModuleTest
@@ -22,7 +21,7 @@ class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
     private val userAccessAuditService: UserAccessAuditService? = null
 
     @Test
-    fun whenRecordAccess_thenUserAccessAuditServiceAudit(scenario: Scenario) {
+    fun whenRecordAccess_thenUserAccessedEventPublished(scenario: Scenario) {
         scenario.stimulate( { userAccessService?.recordAccess("customer-1") })
             .andWaitForEventOfType(UserAccessedEvent::class.java)
             .toArriveAndVerify( { evt: UserAccessedEvent? ->
@@ -38,6 +37,13 @@ class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
             .andWaitForStateChange{
                 userAccessAuditService?.audit("customer-1")
             }
+    }
+
+    @Test
+    fun whenRecordAccess_thenUserAccessAuditServiceAudit(scenario: Scenario) {
+        scenario.stimulate( { userAccessService?.recordAccess("customer-1") })
+            .andWaitForStateChange { userAccessAuditService?.audit("customer-1") }
+
     }
 
 }
