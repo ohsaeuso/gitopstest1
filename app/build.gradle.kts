@@ -1,7 +1,7 @@
 plugins {
     id("buildsrc.convention.kotlin-jvm")
-    id("org.springframework.boot") version "3.2.5"
-    id("io.spring.dependency-management") version "1.1.3"
+    id("org.springframework.boot") version "3.5.3"
+    id("io.spring.dependency-management") version "1.1.7"
     application
 }
 
@@ -9,7 +9,7 @@ version="1.0.0"
 
 dependencyManagement {
     imports {
-        mavenBom("org.springframework.modulith:spring-modulith-bom:1.1.6")
+        mavenBom("org.springframework.modulith:spring-modulith-bom:1.4.3")
     }
 }
 
@@ -32,9 +32,11 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.springframework:spring-jdbc")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
-    testImplementation("org.springframework.boot:spring-boot-testcontainers")
+  //  testImplementation("org.springframework.boot:spring-boot-testcontainers")
+    testImplementation("org.testcontainers:testcontainers:2.0.2") // Spring Boot BOM 관리 버전(1.x)은 Docker 29에서 400 에러 발생 — 버전 명시 필수
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:oracle-free")
+    testRuntimeOnly("com.oracle.database.jdbc:ojdbc11")
 }
 
 application {
@@ -62,5 +64,6 @@ tasks.bootJar {
     archiveFileName = "app.jar"
     enabled = true
 }
+
 
 

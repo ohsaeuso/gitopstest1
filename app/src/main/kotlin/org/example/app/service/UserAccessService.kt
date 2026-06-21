@@ -9,7 +9,7 @@ import org.springframework.transaction.annotation.Transactional
 class UserAccessService(
     private val eventPublisher: ApplicationEventPublisher,
 ) {
-    @Transactional
+    //@Transactional
     fun recordAccess(username: String) {
         eventPublisher.publishEvent(UserAccessedEvent(username))
     }
