@@ -166,33 +166,41 @@ fun recordAccess(username: String)
 
 각 테스트 전 `@BeforeEach`에서 Circuit Breaker를 `CLOSED`로 초기화.
 
+**Circuit Breaker**
+
 - **`fetchDepartments_givenCircuitBreakerOpen_thenFallbackReturned`**
   - 검증: CB OPEN 시 `departmentsFallback` 호출 → `["unknown"]` 반환
   - 기법: `transitionToOpenState()` 강제 전환
 
 - **`fetchDepartments_givenCircuitBreakerOpen_thenCallNotPermittedNotRetried`**
   - 검증: `CallNotPermittedException`은 `ignore-exceptions` 설정으로 재시도 안 함
-  - 기법: retry 이벤트 리스너로 retry count = 0 확인
+  - 기법: retry 이벤트 리스너로 count = 0 확인
 
-- **`departments_circuitBreakerConfig_matchesYaml`**
-  - 검증: slidingWindow=10, 실패율=50%, slowCall=50%/2s, waitOpen=10s, halfOpen=3회
-  - 기법: `CircuitBreakerRegistry`에서 config 직접 읽기
+- **`fetchDepartments_givenCircuitBreakerHalfOpen_thenFailedProbesTransitionToOpen`**
+  - 검증: HALF_OPEN 상태에서 3회 프로브 모두 실패 → OPEN 전이 (`permittedNumberOfCallsInHalfOpenState: 3` 동작 증명)
+  - 기법: Bulkhead 소진으로 프로브 실패 강제 → `repeat(3)` 후 `cb.state == OPEN` 검증
 
-- **`departments_retryConfig_matchesYaml`**
-  - 검증: maxAttempts=3
-  - 기법: `RetryRegistry`에서 config 직접 읽기
+**Retry**
 
-- **`departments_bulkheadConfig_matchesYaml`**
-  - 검증: maxConcurrentCalls=5, maxWaitDuration=100ms
-  - 기법: `BulkheadRegistry`에서 config 직접 읽기
+- **`fetchDepartments_givenRuntimeException_thenRetriedUpToMaxAttempts`**
+  - 검증: `RuntimeException` 발생 시 재시도 이벤트 정확히 2회 (`maxAttempts=3` = 초기 1 + 재시도 2)
+  - 기법: `BulkheadFullException`(extends RuntimeException)을 Bulkhead 소진으로 결정론적 발생, retry 이벤트 리스너로 count 검증
+
+**Bulkhead**
+
+- **`fetchDepartments_givenBulkheadFull_thenFallbackReturned`**
+  - 검증: 동시 슬롯 초과 시 fallback `["unknown"]` 반환
+  - 기법: `bulkhead.acquirePermission()` × 5 로 슬롯 소진 → 다음 호출 거부 확인
+
+**TimeLimiter**
 
 - **`fetchDepartmentsAsync_givenCallExceedsTimeLimitOf1s_thenFallbackReturned`**
-  - 검증: 내부 2초 sleep → 1초 제한 초과 → `departmentsAsyncFallback` 호출 → `["unknown"]`
-  - 기법: 실제 호출 (항상 타임아웃 발생하므로 별도 조작 불필요)
+  - 검증: 2초 sleep이 1초 제한 초과 → `departmentsAsyncFallback` 호출 → `["unknown"]`
+  - 기법: 실제 호출 (항상 타임아웃 발생)
 
-- **`departments_timeLimiterConfig_matchesYaml`**
-  - 검증: timeoutDuration=1s, cancelRunningFuture=true
-  - 기법: `TimeLimiterRegistry`에서 config 직접 읽기
+- **`fetchDepartmentsAsync_givenTimeLimiterApplied_thenCompletesBeforeInternalSleepDeadline`**
+  - 검증: 완료까지 경과 시간 < 2000ms (TimeLimiter가 1초에 실제로 차단했다는 증거)
+  - 기법: 호출 전후 `System.currentTimeMillis()` 차이 측정
 
 ---
 
@@ -202,31 +210,38 @@ fun recordAccess(username: String)
 
 각 테스트 전 `@BeforeEach`에서 `rateLimiter.acquirePermission()`으로 잔여 허용량을 모두 소진.
 
+**Rate Limiter**
+
 - **`recordAccess_givenPermitsExhausted_thenRequestNotPermitted`**
   - 검증: 허용량 소진 후 `@RateLimiter` 호출 시 `RequestNotPermitted` throw
   - 기법: `@BeforeEach`에서 `acquirePermission()`으로 직접 허용량 소진
 
 - **`access_rateLimiterConfig_matchesYaml`**
   - 검증: limitForPeriod=5, limitRefreshPeriod=10s, timeoutDuration=0s
-  - 기법: `RateLimiterRegistry`에서 config 직접 읽기
+  - 기법: `RateLimiterRegistry`에서 config 직접 읽기 (yaml 바인딩 확인용)
 
 ---
 
 ### 테스트 설계 원칙
 
-**결정론적 실행 보장**
+**결정론적 실행을 위한 핵심 기법: Bulkhead permit 수동 소진**
 
-- **Circuit Breaker** — `simulateUnstableExternalCall()`이 40% 랜덤 실패라 임계값 도달 시점이 불확실
-  → `transitionToOpenState()`로 상태를 직접 제어
-- **TimeLimiter** — 내부 로직이 항상 2초 sleep으로 1초 제한 초과가 보장됨
-  → 별도 조작 없이 항상 타임아웃 발생
-- **Rate Limiter** — 이전 테스트가 남긴 잔여 허용량으로 결과가 달라질 수 있음
-  → `@BeforeEach`에서 `acquirePermission()`으로 허용량을 완전 소진
+`simulateUnstableExternalCall()`이 40% 확률로 실패하기 때문에 `RuntimeException`을 결정론적으로 발생시킬 수 없다. 대신 `BulkheadFullException`(extends `RuntimeException`)을 활용한다.
 
-**Config 검증 vs 동작 검증**
+```
+bulkhead.acquirePermission() × 5  →  다음 메서드 호출 시 BulkheadFullException 발생
+                                   →  retry-exceptions: [RuntimeException] 에 해당 → 재시도
+                                   →  최종 실패 시 CircuitBreaker fallback 호출
+```
 
-- yaml 값이 실제로 Resilience4j에 바인딩됐는지는 `*_matchesYaml` 테스트로 확인.
-- 패턴이 실제로 동작(fallback 호출, 예외 발생)하는지는 동작 테스트로 확인.
+이 기법 하나로 Retry·Bulkhead·HALF_OPEN 전이 테스트를 모두 랜덤성 없이 구성할 수 있다.
+
+**상태 격리**
+
+- CB 상태: `@BeforeEach`에서 `transitionToClosedState()` 초기화
+- Bulkhead permit: 소진한 테스트에서 `finally` 블록 안에 `bulkhead.onComplete()` × 5 로 반납
+- Rate Limiter permit: `@BeforeEach`에서 `acquirePermission()` 반복으로 소진
+- retry 이벤트 리스너: 각 테스트가 로컬 `AtomicInteger`를 캡처 — 누적 등록돼도 다른 테스트의 카운터에 영향 없음
 
 ---
 

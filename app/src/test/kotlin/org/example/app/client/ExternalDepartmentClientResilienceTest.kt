@@ -1,16 +1,15 @@
 package org.example.app.client
 
 import io.github.resilience4j.bulkhead.BulkheadRegistry
+import io.github.resilience4j.circuitbreaker.CircuitBreaker
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry
 import io.github.resilience4j.retry.RetryRegistry
-import io.github.resilience4j.timelimiter.TimeLimiterRegistry
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.ActiveProfiles
-import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -30,11 +29,8 @@ class ExternalDepartmentClientResilienceTest {
     @Autowired
     private lateinit var bulkheadRegistry: BulkheadRegistry
 
-    @Autowired
-    private lateinit var timeLimiterRegistry: TimeLimiterRegistry
-
     @BeforeEach
-    fun resetCircuitBreaker() {
+    fun resetState() {
         circuitBreakerRegistry.circuitBreaker("departments").transitionToClosedState()
     }
 
@@ -62,50 +58,78 @@ class ExternalDepartmentClientResilienceTest {
     }
 
     @Test
-    fun departments_circuitBreakerConfig_matchesYaml() {
-        val config = circuitBreakerRegistry.circuitBreaker("departments").circuitBreakerConfig
+    fun fetchDepartments_givenCircuitBreakerHalfOpen_thenFailedProbesTransitionToOpen() {
+        val cb = circuitBreakerRegistry.circuitBreaker("departments")
+        val bulkhead = bulkheadRegistry.bulkhead("departments")
 
-        assertThat(config.slidingWindowSize).isEqualTo(10)
-        assertThat(config.failureRateThreshold).isEqualTo(50f)
-        assertThat(config.slowCallRateThreshold).isEqualTo(50f)
-        assertThat(config.slowCallDurationThreshold).isEqualTo(Duration.ofSeconds(2))
-        assertThat(config.permittedNumberOfCallsInHalfOpenState).isEqualTo(3)
+        cb.transitionToHalfOpenState()
+        // Bulkhead를 소진해 프로브 호출이 모두 실패하도록 강제
+        repeat(5) { bulkhead.acquirePermission() }
+
+        try {
+            // HALF_OPEN에서 허용된 3회 프로브 호출 모두 실패 → OPEN 전이
+            repeat(3) { client.fetchDepartments("user1") }
+
+            assertThat(cb.state).isEqualTo(CircuitBreaker.State.OPEN)
+        } finally {
+            repeat(5) { bulkhead.onComplete() }
+        }
     }
 
     // --- Retry ---
 
     @Test
-    fun departments_retryConfig_matchesYaml() {
-        val config = retryRegistry.retry("departments").retryConfig
+    fun fetchDepartments_givenRuntimeException_thenRetriedUpToMaxAttempts() {
+        val bulkhead = bulkheadRegistry.bulkhead("departments")
+        // BulkheadFullException은 RuntimeException을 상속 → retry-exceptions에 해당해 재시도됨
+        repeat(5) { bulkhead.acquirePermission() }
 
-        assertThat(config.maxAttempts).isEqualTo(3)
+        val retryCount = AtomicInteger(0)
+        retryRegistry.retry("departments").eventPublisher.onRetry { retryCount.incrementAndGet() }
+
+        try {
+            client.fetchDepartments("user1")
+
+            // maxAttempts=3 → 초기 1회 + 재시도 2회 = retry 이벤트 2회
+            assertThat(retryCount.get()).isEqualTo(2)
+        } finally {
+            repeat(5) { bulkhead.onComplete() }
+        }
     }
 
     // --- Bulkhead ---
 
     @Test
-    fun departments_bulkheadConfig_matchesYaml() {
-        val config = bulkheadRegistry.bulkhead("departments").bulkheadConfig
+    fun fetchDepartments_givenBulkheadFull_thenFallbackReturned() {
+        val bulkhead = bulkheadRegistry.bulkhead("departments")
+        repeat(5) { bulkhead.acquirePermission() }
 
-        assertThat(config.maxConcurrentCalls).isEqualTo(5)
-        assertThat(config.maxWaitDuration).isEqualTo(Duration.ofMillis(100))
+        try {
+            val result = client.fetchDepartments("user1")
+
+            assertThat(result).containsExactly("unknown")
+        } finally {
+            repeat(5) { bulkhead.onComplete() }
+        }
     }
 
     // --- TimeLimiter ---
 
     @Test
     fun fetchDepartmentsAsync_givenCallExceedsTimeLimitOf1s_thenFallbackReturned() {
-        // fetchDepartmentsAsync 내부에서 2초 sleep → 1초 제한 초과 → departmentsAsyncFallback 호출
+        // 내부에서 2초 sleep → 1초 제한 초과 → departmentsAsyncFallback 호출
         val result = client.fetchDepartmentsAsync("user1").get(3, TimeUnit.SECONDS)
 
         assertThat(result).containsExactly("unknown")
     }
 
     @Test
-    fun departments_timeLimiterConfig_matchesYaml() {
-        val config = timeLimiterRegistry.timeLimiter("departments").timeLimiterConfig
+    fun fetchDepartmentsAsync_givenTimeLimiterApplied_thenCompletesBeforeInternalSleepDeadline() {
+        val start = System.currentTimeMillis()
+        client.fetchDepartmentsAsync("user1").get(3, TimeUnit.SECONDS)
+        val elapsed = System.currentTimeMillis() - start
 
-        assertThat(config.timeoutDuration).isEqualTo(Duration.ofSeconds(1))
-        assertThat(config.shouldCancelRunningFuture()).isTrue()
+        // 내부 sleep은 2000ms지만 TimeLimiter가 1s에 차단 → 2초 미만에 완료돼야 함
+        assertThat(elapsed).isLessThan(2000)
     }
 }
