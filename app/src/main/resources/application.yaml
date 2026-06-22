@@ -1,5 +1,55 @@
 server.port: 8080
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  health:
+    circuitbreakers:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      departments:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 2s
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        register-health-indicator: true
+  retry:
+    instances:
+      departments:
+        max-attempts: 3
+        wait-duration: 300ms
+        retry-exceptions:
+          - java.lang.RuntimeException
+        ignore-exceptions:
+          - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+  ratelimiter:
+    instances:
+      access:
+        limit-for-period: 5
+        limit-refresh-period: 10s
+        timeout-duration: 0s
+  bulkhead:
+    instances:
+      departments:
+        max-concurrent-calls: 5
+        max-wait-duration: 100ms
+  timelimiter:
+    instances:
+      departments:
+        timeout-duration: 1s
+        cancel-running-future: true
+
 spring:
   security:
     oauth2:

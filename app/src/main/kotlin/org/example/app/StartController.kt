@@ -1,5 +1,6 @@
 package org.example.app
 
+import org.example.app.client.ExternalDepartmentClient
 import org.example.app.service.UserAccessService
 import org.springframework.security.core.annotation.AuthenticationPrincipal
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient
@@ -9,21 +10,28 @@ import org.springframework.security.oauth2.core.user.OAuth2User
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
-import kotlin.math.roundToInt
+import java.util.concurrent.CompletableFuture
 
 
 @RestController
 class StartController(
-    private val  clientService : OAuth2AuthorizedClientService,
+    private val clientService: OAuth2AuthorizedClientService,
     private val userAccessService: UserAccessService,
+    private val externalDepartmentClient: ExternalDepartmentClient,
 ) {
+    // Circuit Breaker + Retry + Bulkhead 적용 (실패 시 fallback ["unknown"] 반환)
     @GetMapping("/users/{username}/departments")
-    fun username(
+    fun departments(
         @PathVariable username: String,
-    ): String {
-        println("/users/$username/departments called")
-        return "${Math.random().roundToInt()}-$username!"}
+    ): List<String> = externalDepartmentClient.fetchDepartments(username)
 
+    // TimeLimiter 적용 (1초 초과 시 fallback 반환)
+    @GetMapping("/users/{username}/departments/async")
+    fun departmentsAsync(
+        @PathVariable username: String,
+    ): CompletableFuture<List<String>> = externalDepartmentClient.fetchDepartmentsAsync(username)
+
+    // Rate Limiter 적용 (10초 당 5회 초과 시 429 반환)
     @GetMapping("/users/{username}/access")
     fun recordAccess(
         @PathVariable username: String,

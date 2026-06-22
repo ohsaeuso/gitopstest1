@@ -2,6 +2,7 @@ plugins {
     id("buildsrc.convention.kotlin-jvm")
     id("org.springframework.boot") version "3.5.3"
     id("io.spring.dependency-management") version "1.1.7"
+    kotlin("plugin.spring") version "2.2.0"
     application
 }
 
@@ -16,6 +17,9 @@ dependencyManagement {
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("org.springframework.boot:spring-boot-starter-aop")
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.3.0")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
 
     // Spring Security
@@ -36,6 +40,7 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter")
     testImplementation("org.testcontainers:oracle-free")
     testRuntimeOnly("com.oracle.database.jdbc:ojdbc11")
+    runtimeOnly("com.h2database:h2")
 }
 
 application {
