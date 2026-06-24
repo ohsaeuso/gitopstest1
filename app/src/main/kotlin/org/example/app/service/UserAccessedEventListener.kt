@@ -1,6 +1,6 @@
 package org.example.app.service
 
-import org.example.api.event.UserAccessedEvent
+import org.example.app.event.UserAccessedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.stereotype.Component
 
