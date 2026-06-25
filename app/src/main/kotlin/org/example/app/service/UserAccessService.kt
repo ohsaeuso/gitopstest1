@@ -1,7 +1,7 @@
 package org.example.app.service
 
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter
-import org.example.api.event.UserAccessedEvent
+import org.example.app.event.UserAccessedEvent
 import org.springframework.context.ApplicationEventPublisher
 import org.springframework.stereotype.Service
 

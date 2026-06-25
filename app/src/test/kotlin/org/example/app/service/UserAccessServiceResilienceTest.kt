@@ -1,4 +1,4 @@
-package org.example.api.service
+package org.example.app.service
 
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry
 import io.github.resilience4j.ratelimiter.RequestNotPermitted

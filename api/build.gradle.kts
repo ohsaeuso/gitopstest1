@@ -23,7 +23,6 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("io.github.resilience4j:resilience4j-spring-boot3:2.3.0")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
-    implementation("org.springframework.boot:spring-boot-starter-oauth2-client")
     implementation(project(":utils"))
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
@@ -37,7 +36,7 @@ dependencies {
 }
 
 application {
-    mainClass = "org.example.app.AppKt"
+    mainClass = "org.example.api.AppKt"
 }
 
 val integrationTest = tasks.register<Test>("integrationTest") {

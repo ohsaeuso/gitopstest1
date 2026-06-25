@@ -1,0 +1,37 @@
+server.port: 8080
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics
+  health:
+    circuitbreakers:
+      enabled: true
+  endpoint:
+    health:
+      show-details: always
+
+resilience4j:
+  ratelimiter:
+    instances:
+      access:
+        limit-for-period: 5
+        limit-refresh-period: 10s
+        timeout-duration: 0s
+
+
+spring:
+  security:
+    oauth2:
+      client:
+        registration:
+          keycloak:
+            client-id: client1
+            client-secret: syQ99oIh4b4okjiH5KkZXprTJqIs6i5U
+            scope: openid,profile,email
+            authorization-grant-type: authorization_code
+            redirect-uri: "http://worker1:30089/login/oauth2/code/keycloak"
+        provider:
+          keycloak:
+            issuer-uri: https://keycloak.external.com/realms/realm1

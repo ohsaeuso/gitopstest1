@@ -1,4 +1,4 @@
-package org.example.api
+package org.example.app
 
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.test.context.DynamicPropertyRegistry

@@ -1,8 +1,8 @@
-package org.example.api.service
+package org.example.app.service
 
 import org.assertj.core.api.Assertions.assertThat
-import org.example.api.IntegrationTestBase
-import org.example.api.event.UserAccessedEvent
+import org.example.app.IntegrationTestBase
+import org.example.app.event.UserAccessedEvent
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.modulith.test.ApplicationModuleTest
