@@ -4,20 +4,19 @@ import io.github.resilience4j.bulkhead.annotation.Bulkhead
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker
 import io.github.resilience4j.retry.annotation.Retry
 import io.github.resilience4j.timelimiter.annotation.TimeLimiter
+import org.example.api.domain.PendingDepartmentRequest
+import org.example.api.repository.PendingDepartmentRequestRepository
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.util.concurrent.CompletableFuture
 
 @Component
-class ExternalDepartmentClient {
+class ExternalDepartmentClient(
+    private val pendingRequestRepository: PendingDepartmentRequestRepository
+) {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /**
-     * Circuit Breaker: 실패율 50% 초과 시 OPEN → 10초 후 HALF_OPEN 전환
-     * Retry: 최대 3회 재시도, 300ms 간격 (CallNotPermittedException 제외)
-     * Bulkhead: 최대 5개 동시 호출 허용
-     */
     @CircuitBreaker(name = "departments", fallbackMethod = "departmentsFallback")
     @Retry(name = "departments")
     @Bulkhead(name = "departments")
@@ -27,10 +26,6 @@ class ExternalDepartmentClient {
         return listOf("Engineering", "HR", "Sales")
     }
 
-    /**
-     * TimeLimiter: 1초 초과 시 TimeoutException → Circuit Breaker가 slow call로 기록
-     * CompletableFuture 반환 타입 필수
-     */
     @CircuitBreaker(name = "departments", fallbackMethod = "departmentsAsyncFallback")
     @TimeLimiter(name = "departments")
     fun fetchDepartmentsAsync(username: String): CompletableFuture<List<String>> =
@@ -42,6 +37,10 @@ class ExternalDepartmentClient {
 
     private fun departmentsFallback(username: String, ex: Exception): List<String> {
         log.warn("Department service unavailable for user={}, cause={}", username, ex.javaClass.simpleName)
+        if (!pendingRequestRepository.existsByUsernameAndProcessedFalse(username)) {
+            pendingRequestRepository.save(PendingDepartmentRequest(username = username))
+            log.info("Queued pending department request for user={}", username)
+        }
         return listOf("unknown")
     }
 

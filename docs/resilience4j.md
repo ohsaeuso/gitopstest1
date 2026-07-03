@@ -36,7 +36,7 @@ resilience4j:
         failure-rate-threshold: 50         # 실패율 50% 초과 → OPEN
         slow-call-rate-threshold: 50       # 느린 호출 비율 50% 초과 → OPEN
         slow-call-duration-threshold: 2s   # 2초 초과 = 느린 호출
-        wait-duration-in-open-state: 10s   # OPEN 상태 10초 유지 후 HALF_OPEN
+        #wait-duration-in-open-state: 10s   # OPEN 상태 10초 유지 후 HALF_OPEN, 캐시가 붙어야 "10초 동안 캐시로 버틴다"는 의미가 생기고, 그때 비로소 이 숫자를 튜닝할 이유가 생깁니다
         permitted-number-of-calls-in-half-open-state: 3  # HALF_OPEN에서 3회 탐색
         register-health-indicator: true    # Actuator /health 노출
 ```

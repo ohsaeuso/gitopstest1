@@ -1,0 +1,4 @@
+department:
+  outbox:
+    processor:
+      enabled: false
