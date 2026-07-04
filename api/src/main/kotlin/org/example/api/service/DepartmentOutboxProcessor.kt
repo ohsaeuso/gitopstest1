@@ -29,16 +29,14 @@ class DepartmentOutboxProcessor(
 
         log.info("Processing {} pending department requests", pending.size)
         for (request in pending) {
-            runCatching { client.fetchDepartments(request.username) }
-                .onSuccess {
-                    request.processed = true
-                    repository.save(request)
-                    log.info("Resolved pending request for user={}", request.username)
-                }
-                .onFailure {
-                    log.warn("Failed to resolve pending request for user={}, stopping batch", request.username)
-                    return
-                }
+            val result = client.fetchDepartments(request.username)
+            if (result.fromFallback) {
+                log.warn("Failed to resolve pending request for user={}, stopping batch", request.username)
+                return
+            }
+            request.processed = true
+            repository.save(request)
+            log.info("Resolved pending request for user={}", request.username)
         }
     }
 }

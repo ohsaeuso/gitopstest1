@@ -111,13 +111,15 @@ resilience4j:
 @CircuitBreaker(name = "departments", fallbackMethod = "departmentsFallback")
 @Retry(name = "departments")
 @Bulkhead(name = "departments")
-fun fetchDepartments(username: String): List<String>
+fun fetchDepartments(username: String): DepartmentLookupResult
 
 // 비동기: CircuitBreaker → TimeLimiter 순서로 적용 (CompletableFuture 필수)
 @CircuitBreaker(name = "departments", fallbackMethod = "departmentsAsyncFallback")
 @TimeLimiter(name = "departments")
-fun fetchDepartmentsAsync(username: String): CompletableFuture<List<String>>
+fun fetchDepartmentsAsync(username: String): CompletableFuture<DepartmentLookupResult>
 ```
+
+`ExternalDepartmentClient`는 DB를 모르며, `fromFallback` 플래그만 반환한다. pending 요청 큐잉(outbox 저장)은 `DepartmentLookupService`(서비스 레이어)로 분리되어 있다 — `fallbackMethod`는 원본 메서드와 파라미터 시그니처가 같아야 하므로, 그 안에서 직접 DB에 쓰면 필요한 컨텍스트가 파라미터로 제한되는 한계가 있었음.
 
 **어노테이션 실행 우선순위 (높을수록 먼저 감쌈):**
 `Bulkhead > CircuitBreaker > RateLimiter > Retry > TimeLimiter > ... > 실제 메서드`

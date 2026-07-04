@@ -38,7 +38,8 @@ class ExternalDepartmentClientResilienceTest {
 
         val result = client.fetchDepartments("user1")
 
-        assertThat(result).containsExactly("unknown")
+        assertThat(result.departments).containsExactly("unknown")
+        assertThat(result.fromFallback).isTrue()
     }
 
     @Test
@@ -94,7 +95,8 @@ class ExternalDepartmentClientResilienceTest {
         try {
             val result = client.fetchDepartments("user1")
 
-            assertThat(result).containsExactly("unknown")
+            assertThat(result.departments).containsExactly("unknown")
+            assertThat(result.fromFallback).isTrue()
         } finally {
             repeat(5) { bulkhead.onComplete() }
         }
@@ -104,7 +106,8 @@ class ExternalDepartmentClientResilienceTest {
     fun fetchDepartmentsAsync_givenCallExceedsTimeLimitOf1s_thenFallbackReturned() {
         val result = client.fetchDepartmentsAsync("user1").get(3, TimeUnit.SECONDS)
 
-        assertThat(result).containsExactly("unknown")
+        assertThat(result.departments).containsExactly("unknown")
+        assertThat(result.fromFallback).isTrue()
     }
 
     @Test
