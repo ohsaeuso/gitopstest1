@@ -3,6 +3,7 @@ package org.example.app.service
 import io.github.resilience4j.ratelimiter.RateLimiterRegistry
 import io.github.resilience4j.ratelimiter.RequestNotPermitted
 import org.assertj.core.api.Assertions.assertThat
+import org.example.app.application.service.UserAccessService
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows

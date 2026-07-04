@@ -19,6 +19,22 @@ Integrates with Oracle 23.
 - Structured logs via SLF4J + Logback JSON. **Never** `System.out.println`.
 - Don't use `@Autowired` on fields. Always constructor injection.
 
+### Package structure — hexagonal (ports & adapters)
+Each module (`api`, `app`) is organized by hexagonal layer, not by Spring stereotype:
+- `domain/` — pure Kotlin. No Spring/JPA annotations, no framework imports.
+- `application/port/in/` — use case interfaces (what driving adapters call).
+- `application/port/out/` — interfaces for what the application needs from the outside world (gateways, persistence).
+- `application/service/` — `@Service` classes implementing a `port.in` interface, depending only on `port.out` interfaces and `domain` types.
+- `adapter/in/web|scheduler|event/` — driving adapters (`@RestController`, `@Scheduled` triggers, `@EventListener`). Depend on a `port.in` use case, never on a concrete `application.service` class directly.
+- `adapter/out/client|persistence/` — driven adapters implementing a `port.out` interface. JPA `@Entity` classes, Spring Data repositories, and resilience4j-guarded external clients live only here — never expose a JPA entity or Spring Data repository outside its adapter package.
+- `config/` — pure Spring wiring that isn't part of the hexagon (`SecurityConfig`, `GlobalExceptionHandler`). Not a port or adapter.
+
+Dependency direction: `adapter → application → domain`, never the reverse; adapters never depend on each other.
+
+**Kotlin gotcha:** `in` is a hard keyword. Every `package`/`import` line touching a `port.in`/`adapter.in` segment must backtick it: `package org.example.api.application.port.\`in\``. `out` needs no escaping.
+
+See `docs/architecture.md` for the full package tree and rationale.
+
 ## Test conventions
 - Minimum coverage: 80% lines in `service/`.
 - Integration: `@SpringBootTest` + `@Testcontainers` with real Oracle.
