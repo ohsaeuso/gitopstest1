@@ -15,7 +15,9 @@ dependencyManagement {
 }
 
 dependencies {
-    implementation(project(":app"))
+    // required at runtime: Spring Data JPA's constructor discovery introspects Kotlin metadata
+    // on @Entity classes and throws NoClassDefFoundError without this on the classpath
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
     implementation("org.springframework.boot:spring-boot-starter-security")
     implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
@@ -23,10 +25,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-aop")
     implementation("io.github.resilience4j:resilience4j-spring-boot3:2.3.0")
     implementation("net.logstash.logback:logstash-logback-encoder:7.4")
-    implementation(project(":utils"))
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
-    testImplementation("org.springframework:spring-jdbc")
     testImplementation("org.springframework.modulith:spring-modulith-starter-test")
     testImplementation("org.testcontainers:testcontainers:2.0.2")
     testImplementation("org.testcontainers:junit-jupiter")
@@ -43,6 +43,12 @@ val integrationTest = tasks.register<Test>("integrationTest") {
     description = "Runs integration tests (suffix IT)."
     group = "verification"
     include("**/*IT.class")
+}
+
+tasks.withType<Test>().configureEach {
+    // activates src/test/resources/application-test.yaml as an overlay on top of the main
+    // application.yaml, instead of a same-named file shadowing it outright
+    systemProperty("spring.profiles.active", "test")
 }
 
 tasks.test {

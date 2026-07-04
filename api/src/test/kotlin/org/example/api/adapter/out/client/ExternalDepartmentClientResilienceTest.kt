@@ -58,6 +58,8 @@ class ExternalDepartmentClientResilienceTest {
         val cb = circuitBreakerRegistry.circuitBreaker("departments")
         val bulkhead = bulkheadRegistry.bulkhead("departments")
 
+        // resilience4j only allows HALF_OPEN from OPEN/DISABLED/FORCED_OPEN, not directly from CLOSED
+        cb.transitionToOpenState()
         cb.transitionToHalfOpenState()
         repeat(5) { bulkhead.acquirePermission() }
 

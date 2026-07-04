@@ -8,10 +8,14 @@ import org.example.app.domain.UserAccessedEvent
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.modulith.test.ApplicationModuleTest
+import org.springframework.modulith.test.ApplicationModuleTest.BootstrapMode
 import org.springframework.modulith.test.Scenario
 
 
-@ApplicationModuleTest
+// DIRECT_DEPENDENCIES is required: the listener depends on beans from the `application` module
+// (UserAccessService, UserAccessAuditService), and the default STANDALONE mode only bootstraps
+// the module under test, leaving those beans unresolved.
+@ApplicationModuleTest(BootstrapMode.DIRECT_DEPENDENCIES)
 class UserAccessedEventListenerModuleTest : IntegrationTestBase() {
 
     @Autowired

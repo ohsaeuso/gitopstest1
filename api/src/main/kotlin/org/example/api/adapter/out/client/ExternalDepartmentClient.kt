@@ -15,8 +15,11 @@ class ExternalDepartmentClient : DepartmentGateway {
 
     private val log = LoggerFactory.getLogger(javaClass)
 
-    @CircuitBreaker(name = "departments", fallbackMethod = "departmentsFallback")
-    @Retry(name = "departments")
+    // fallbackMethod must live on @Retry, not @CircuitBreaker: Spring's fixed aspect order
+    // puts @Retry outermost, so a fallback on @CircuitBreaker would catch every exception
+    // (including bulkhead rejections) on the first attempt and retries would never fire.
+    @CircuitBreaker(name = "departments")
+    @Retry(name = "departments", fallbackMethod = "departmentsFallback")
     @Bulkhead(name = "departments")
     override fun fetchDepartments(username: String): DepartmentLookupResult {
         log.debug("Fetching departments for user: {}", username)
