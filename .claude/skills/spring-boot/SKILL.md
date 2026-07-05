@@ -16,4 +16,21 @@
 - ✅ CORRECT - constructor injection (final fields)
 - ❌ WRONG - @Autowired on field
 
+## Stacking resilience4j annotations (@CircuitBreaker/@Retry/@Bulkhead/@RateLimiter/@TimeLimiter)
+- Annotation order in the code (top-to-bottom) has **no effect** on execution order. Each one is a
+  separate Spring AOP aspect with its own fixed `@Order`; combined they execute (outer→inner):
+  `Retry → CircuitBreaker → RateLimiter → TimeLimiter → Bulkhead`.
+- Put `fallbackMethod` on whichever annotation is **outermost** among the ones you're combining.
+  If `@Retry` + `@CircuitBreaker` are both present, `fallbackMethod` must go on `@Retry` — putting
+  it on `@CircuitBreaker` (inner) makes it swallow every exception (bulkhead rejections included)
+  on the very first attempt, so `@Retry` never sees a failure and silently never retries.
+- To verify the actual order yourself rather than assume: decompile the relevant
+  `resilience4j-spring6-*-sources.jar` from the Gradle cache and check `getXxxAspectOrder()` in
+  `io.github.resilience4j.spring6.<name>.configure.<Name>ConfigurationProperties`, or add a
+  temporary debug log/println and observe which exception reaches which fallback.
+- `@Bulkhead`/`@RateLimiter` etc. also require `spring-boot-starter-aop` on the module's classpath
+  (brings `aspectjweaver`) — without it, Spring's AOP auto-proxying never activates and the
+  annotations become silent no-ops (see `org.example.app.application.service.UserAccessService`
+  history: rate limiting didn't actually work until this dependency was added).
+
 [continues with exception handling, validation, properties, actuator…]
