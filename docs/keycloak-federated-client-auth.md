@@ -247,8 +247,24 @@ Keycloak 내장 Signed Jwt 검증기는 RFC 7523의 **자기 서명 모델**(`is
 - **다른 점:** 범용 서명이 아니라 **고정 포맷의 SA 신원 클레임 하나만** 발급. AWS STS `AssumeRoleWithWebIdentity`, GCP Workload Identity Federation과 같은 포지션.
 - "발급"은 "서명"보다 무거운 개념 — 서명 + **정책 판단**(이 요청자가 정말 이 SA인지, 이 aud로 요청할 자격이 있는지, TTL을 얼마나 줄지, 클레임에 뭘 넣을지)이 포함된 것. 이 판단이 이미 일종의 1차 인가라서, Keycloak이 그 클레임을 믿고 role 매핑을 할 수 있는 신뢰 기반이 됨.
 
+### K8s + Keycloak 환경이어도 방법 B(Token Exchange)를 안 쓰는 이유
+
+기술적으론 딱 맞는 조합이지만, 실무에서 도입을 미루게 되는 이유들:
+
+1. **버전 요건이 허들** — Token Exchange V2는 **Keycloak 26.2+ GA**. 그 이전은 legacy V1(preview)이라 프로덕션에 걸기 불안정. 이 기능 하나 때문에 메이저 버전을 올리는 건 회귀 테스트까지 딸려오는 큰 프로젝트.
+2. **FGAP(Fine-Grained Admin Permission) 자체가 아직 무겁다** — Token Exchange를 쓰려면 FGAP를 켜고 세밀한 정책을 짜야 하는데, FGAP도 상대적으로 성숙도가 낮은 기능. 덜 검증된 기능 두 개를 프로덕션 인증 경로에 동시에 얹는 리스크.
+3. **복잡도가 없어지는 게 아니라 이동함** — 이미 Vault 등으로 secret 자동 로테이션이 돌아가는 조직이면, Token Exchange로 갈아타는 순간 IDP 등록·매퍼·FGAP 정책이라는 **새 관리 대상**이 생기는 것뿐. 클러스터가 여러 개면 등록해야 할 IDP도 그만큼 늘어남.
+4. **온프렘이면 K8s API 서버 메타데이터를 외부 노출**해야 함 — JWKS 자체는 공개해도 안전하지만, "컨트롤 플레인 인접 엔드포인트는 무조건 외부 노출 금지"라는 보안 정책에 걸리는 조직이 많음.
+5. **벤더 락인** — IDP 브로커링 + FGAP + Token Exchange V2 조합은 Keycloak 특화 구성. 나중에 다른 IdP로 이전할 계획이 있다면 이 투자가 안 옮겨감. 반면 `client_secret_basic`/`private_key_jwt`는 어디서든 표준 지원.
+6. **감사·팀 숙련도 비용** — 컴플라이언스 담당자는 "secret 로테이션 주기"는 익숙해도 "SA 토큰을 외부 IdP로 등록해 교환"하는 흐름은 생소해 매번 설명 필요. 이해하는 사람이 소수면 버스 팩터 리스크, 장애 시 디버깅 표면도 넓음(토큰 발급 → 네트워크 경로 → IDP 등록/JWKS fetch → FGAP 정책 → 매퍼, 5~6단계).
+
+**단, 위 3번은 전제에 따라 뒤집힘:** 만약 조직에 **Vault/Secrets Manager가 아직 없다면**, `client_secret` + 자동 로테이션을 하려 해도 결국 Vault를 새로 구축해야 함(HA, auto-unseal, Agent Injector, 백업/DR까지 — 이것도 "지켜야 할 새 시스템"). 이 경우 Token Exchange는 **이미 떠 있는 Keycloak에 설정만 얹는** 것이라 오히려 신규 인프라 도입 비용이 더 낮을 수 있음. (단, Vault를 이 문제 하나가 아니라 다른 secret까지 포함해 어차피 도입할 계획이라면 얘기가 다시 달라짐.)
+
+**결론:** 지금 이 프로젝트 규모/현황(Keycloak 버전 미확정, 클러스터 종류 미확정)에서는 과설계 리스크가 크므로, 방법 B는 "옵션 지도"로 남겨두고 실제 구현은 가벼운 방식(`client_secret` + 로테이션, 또는 Vault 부재 시 상황에 따라 Token Exchange)으로 시작. 버전/클러스터 확정 후 재검토.
+
 ## TODO / 다음 단계
 
-- [ ] 실제 Keycloak 버전 확인 (26.2+ 여부)
+- [ ] 실제 Keycloak 버전 확인 (26.2+ 여부, "25.x대"로 기억하나 정확한 값 재확인 필요 — `kc.sh --version` 또는 배포 이미지 태그)
 - [ ] 클러스터 종류 확정 (EKS / GKE / 온프렘) — issuer 노출 방식이 달라짐
+- [ ] 사내 Vault/Secrets Manager 도입 여부 확인 — 없다면 방법 B 쪽으로 무게추가 기울 수 있음
 - [ ] ECOM 이슈 생성 후 `/jira-pull`로 컨텍스트 당겨 구현 시작
