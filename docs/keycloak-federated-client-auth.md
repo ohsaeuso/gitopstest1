@@ -146,6 +146,107 @@ adapter/out/client/KeycloakTokenExchangeClient.kt   # WebClient + resilience4j (
 
 `test-patterns` 스킬 기준: Testcontainers로 **Keycloak 컨테이너**를 띄우고, K8s issuer 역할은 목 OIDC issuer(자체 서명 JWKS 서버 또는 WireMock)로 대체해 `subject_issuer` 플로우를 통합 테스트.
 
+## FAQ — OAuth2 Client 인증 관련 추가 논의 (2026-07-31)
+
+### private_key_jwt는 그냥 우리가 아는 JWT인가?
+
+포맷(header.payload.signature)은 동일. 다른 건 **용도** — access/id token이 아니라 **client assertion**(RFC 7523)이다.
+
+- `iss` = `sub` = client_id (본인 증명)
+- `aud` = 토큰 엔드포인트 URL
+- `exp`, `jti`(재사용 방지 nonce)
+- client 자신의 private key로 서명 → 서버는 등록된 public key(JWKS)로 검증
+- 요청 시 `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer` + `client_assertion=<JWT>`
+
+### OAuth2 client 인증 방식 전체 지도
+
+| 방식 | 설명 |
+| --- | --- |
+| `client_secret_basic` | HTTP Basic 헤더에 client_id:secret |
+| `client_secret_post` | body에 client_id/secret |
+| `private_key_jwt` (RFC 7523) | 비대칭키로 서명한 JWT assertion |
+| `client_secret_jwt` (RFC 7523) | 위와 같은 RFC지만 **공유 secret으로 HMAC** 서명 |
+| `tls_client_auth` / `self_signed_tls_client_auth` (mTLS, RFC 8705) | 클라이언트 인증서로 TLS 레벨 인증 |
+| `none` | public client, secret 없음 (PKCE로 대체) |
+
+### client_secret은 정말 안 쓰나? — 아니다, 여전히 압도적 다수
+
+- Keycloak/Auth0/Okta/Azure AD/Google 전부 confidential client 기본값이 `client_secret_basic`.
+- secret을 배제하는 건 특정 맥락뿐: **public client**(SPA/모바일, 애초에 secret 못 숨김 → PKCE), **FAPI**(오픈뱅킹, 명시적으로 secret 금지), **워크로드 규모가 큰 환경**(K8s 등, 이 문서의 동기).
+
+### OAuth 2.1이 바꾼 것 / 안 바꾼 것
+
+- **제거:** Implicit grant, Resource Owner Password Credentials grant
+- **강제:** authorization_code grant 쓰는 모든 client(confidential 포함)에 PKCE
+- **비권장(제거 아님):** `client_secret_post` (body에 secret) → Basic 헤더 권장
+- **안 바뀜:** `client_secret_basic`은 confidential client 인증 방식으로 여전히 유효. "OAuth 2.1은 client secret 지원 안 함"은 오해 — public client는 원래도 못 썼던 것뿐.
+
+### grant_type과 client 인증 방식은 별개 축
+
+`private_key_jwt`는 grant_type이 아니다. "토큰을 어떤 흐름으로 받나"(`authorization_code`, `client_credentials`, `refresh_token`, `token-exchange`)와 "`/token` 호출 시 나를 어떻게 증명하나"(`client_secret_basic`, `private_key_jwt`, mTLS)는 조합 가능한 별개 파라미터. `authorization_code` + `private_key_jwt` 조합도 정상.
+
+### private_key_jwt 서명 방법
+
+```
+header:  { "alg": "RS256", "kid": "key-1" }   // RS256/PS256/ES256 (비대칭) — HS256은 client_secret_jwt용
+payload: {
+  "iss": "ecommerce-api", "sub": "ecommerce-api",
+  "aud": "<token endpoint>", "jti": "<nonce>",
+  "exp": now+60s, "iat": now
+}
+```
+
+`kid`로 키 로테이션 시 무중단 전환(JWKS에 신·구 키 동시 노출) 가능. `exp`는 짧게(1~5분) 잡아 탈취 시 재사용 창 최소화.
+
+### private_key_jwt도 결국 키 관리 부담은 못 없앤다
+
+- **해결하는 것:** secret이 네트워크를 안 탐 (전송 구간 유출 위험 제거).
+- **해결 못 하는 것:** private key를 client 쪽에 **장기 보관·로테이션**해야 하는 문제는 client_secret과 본질적으로 동급 (대칭키 vs 비대칭키 차이일 뿐). → K8s에서 Federated 방식(방법 B)을 쓰는 이유: 키 관리 책임을 애플리케이션 팀 → 플랫폼(K8s)으로 이전.
+
+### 방법 A가 비권장인 이유 (iss/sub 둘 다 안 맞음)
+
+Keycloak 내장 Signed Jwt 검증기는 RFC 7523의 **자기 서명 모델**(`iss == sub == client_id`, 자기 JWKS에서만 키 조회)을 전제로 한다. K8s SA 토큰은:
+
+```json
+{ "iss": "https://oidc.eks.<region>.amazonaws.com/id/<cluster-id>",
+  "sub": "system:serviceaccount:orders-ns:orders-sa" }
+```
+
+`iss`(클러스터 URL)도 `sub`(K8s 포맷)도 client_id와 무관 → 커스텀 SPI로 `sub`/`iss` 체크와 JWKS resolution까지 다 우회해야 함. 결국 방법 B(Token Exchange, 처음부터 "외부 issuer" 개념을 표준 지원)가 이미 해주는 걸 재발명하는 셈 + Keycloak 버전 업그레이드 시 SPI 깨질 리스크. **어거지 — 이론상 가능하나 실무에서 할 이유 없음.**
+
+### mTLS를 안 쓰는 이유
+
+1. K8s가 짧은 수명 client 인증서를 기본 제공 안 함 — 서비스 메시(Istio/Linkerd)나 SPIFFE/SPIRE 같은 추가 인프라 필요.
+2. PKI 관리 부담(CA, 폐기/CRL) — private key 관리 문제가 인증서+CA 관리로 확장.
+3. Ingress/LB가 보통 TLS를 종료하기 때문에 client cert 정보가 Keycloak까지 안 전달됨 — 전체 네트워크 경로를 mTLS-aware하게 재구성해야 함.
+
+### JWKS는 어디서 관리하나
+
+| JWKS | 관리 주체 |
+| --- | --- |
+| K8s SA 토큰용 (`/openid/v1/jwks`) | kube-apiserver 자동 호스팅. EKS/GKE는 클라우드 관리, 온프렘은 외부 노출만 필요 |
+| Keycloak 자신의 realm 키 (`/realms/{realm}/protocol/openid-connect/certs`) | Keycloak이 자체 관리 (Realm Settings → Keys) |
+| (참고) private_key_jwt를 실제 썼다면 | 우리(client)가 직접 호스팅하거나 Keycloak client 설정에 업로드 — 방법 B를 쓰는 한 해당 없음 |
+
+### K8s SA 토큰 로테이션 주기
+
+- **토큰 TTL**(`expirationSeconds`, 예: 600초)과 **서명 키 로테이션**은 별개.
+- vanilla K8s는 서명 키 자동 로테이션 없음 — 관리자가 수동으로 신·구 키를 JWKS에 동시 노출하며 전환(무중단), 주기는 조직 정책에 달림.
+- 매니지드 클라우드(EKS/GKE)는 내부적으로 관리하나 공개된 고정 주기는 없음 — 필요 시 각 클라우드 문서 확인.
+
+### Keycloak jwksUrl 캐싱 주기
+
+- 고정 주기 폴링이 아니라 **캐시 + `kid` 미스 시 lazy refetch** 모델. 반복 미스로 인한 DoS 방지용 최소 fetch 간격(rate limit)이 있으나 정확한 기본값은 버전마다 달라 별도 확인 필요 (TODO 참고).
+- 확인 방법: Admin Console Keys 설정 확인, 또는 실제 키 전환 후 `org.keycloak.keys` DEBUG 로그로 refetch 시점 관찰.
+
+### "K8s 컨트롤러 = KMS"인가?
+
+정확히는 KMS보다 **워크로드 아이덴티티 발급자(OIDC IdP / STS)**에 가깝다.
+
+- **KMS와 같은 점:** 키 자체는 절대 밖으로 안 나가고, "서명 연산"만 서비스로 제공.
+- **다른 점:** 범용 서명이 아니라 **고정 포맷의 SA 신원 클레임 하나만** 발급. AWS STS `AssumeRoleWithWebIdentity`, GCP Workload Identity Federation과 같은 포지션.
+- "발급"은 "서명"보다 무거운 개념 — 서명 + **정책 판단**(이 요청자가 정말 이 SA인지, 이 aud로 요청할 자격이 있는지, TTL을 얼마나 줄지, 클레임에 뭘 넣을지)이 포함된 것. 이 판단이 이미 일종의 1차 인가라서, Keycloak이 그 클레임을 믿고 role 매핑을 할 수 있는 신뢰 기반이 됨.
+
 ## TODO / 다음 단계
 
 - [ ] 실제 Keycloak 버전 확인 (26.2+ 여부)
