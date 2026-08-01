@@ -131,17 +131,6 @@ subject_issuer=k8s-cluster-prod
 
 **결론: 방법 B (Token Exchange) 권장.**
 
-## 이 저장소(헥사고날 구조)에 적용 시 구현 방향
-
-```
-application/port/out/TokenExchangePort.kt          # 순수 인터페이스, domain 타입만 노출
-adapter/out/client/KeycloakTokenExchangeClient.kt   # WebClient + resilience4j (CircuitBreaker/Retry)
-```
-
-- `TokenExchangePort`는 `fun exchange(subjectToken: String): AccessToken` 수준의 최소 계약만 노출 (Keycloak 응답 DTO를 도메인 밖으로 유출 금지)
-- SA 토큰 경로(`/var/run/secrets/keycloak/token`) 읽기는 어댑터 내부에 캡슐화
-- 실패 시 `DomainException` 하위 타입(예: `TokenExchangeFailedException`)으로 변환 → `GlobalExceptionHandler`가 RFC 7807로 변환
-
 ## 테스트
 
 `test-patterns` 스킬 기준: Testcontainers로 **Keycloak 컨테이너**를 띄우고, K8s issuer 역할은 목 OIDC issuer(자체 서명 JWKS 서버 또는 WireMock)로 대체해 `subject_issuer` 플로우를 통합 테스트.
