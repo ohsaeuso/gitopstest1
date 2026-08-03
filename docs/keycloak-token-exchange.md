@@ -64,14 +64,50 @@ jwks_uri: https://192.168.0.21:6443/openid/v1/jwks
 
 > nginx는 Keycloak의 **인바운드** 트래픽(브라우저 → Keycloak)에만 관여. Keycloak → K8s apiserver로 나가는 **아웃바운드** JWKS fetch와는 무관 — 서로 다른 TLS 연결, 다른 신뢰 설정(`KC_HTTPS_CERTIFICATE_FILE` vs `KC_TRUSTSTORE_PATHS`)이라 영향 없음.
 
+**Keycloak 컨테이너 세부 (2026-08-03, `docker inspect`로 확인):**
+
+- **docker-compose로 관리** — `/home/ubuntu/keycloak/docker-compose.yaml`, project `keycloak`. 설정 변경은 `docker run` 재실행이 아니라 이 compose 파일을 고치고 `docker compose up -d`로 재생성해야 함 (그래야 `restart: unless-stopped` 등 기존 정책이 유지됨).
+- **비root 유저**(`User: 1000`)로 실행 — 볼륨 마운트하는 파일(CA 인증서 등)은 uid 1000이 읽을 수 있는 권한(예: `chmod 644`)이어야 함.
+- **DB는 Oracle이지만 원격** — `KC_DB_URL=jdbc:oracle:thin:@//100.69.90.92:1521/freepdb1`, `extra_hosts: worker1:100.89.245.10` 둘 다 Tailscale 대역(`100.x`) IP. 즉 Keycloak 앱은 로컬(`ubuntu-home-1`)에서 뜨지만 DB 백엔드는 Tailscale 너머 다른 호스트에 있음 — apiserver(LAN `192.168.0.21`) 도달성과는 별개 경로/신뢰 설정이라 서로 영향 없음.
+- **브리지 네트워크**(`keycloak_default`, host 네트워크 아님) — 컨테이너 IP는 `172.18.0.x`. apiserver로 나가는 아웃바운드는 Docker NAT를 거치지만 실질적으로 문제 없이 통과함 (JWKS 도달성 검증 완료, 아래 참고).
+- 기존 바인드 마운트 3개는 커스텀 provider jar들 (`ojdbc17.jar`, `dynamic-claim-mapper.jar`, `kotlin-stdlib-2.2.21.jar`) — CA truststore는 이번에 새로 추가.
+
 ## 남은 실제 블로커
 
-1. **TLS 신뢰** — Keycloak이 apiserver(6443)의 self-signed 인증서(kubeadm CA)를 신뢰하도록 `KC_TRUSTSTORE_PATHS`에 CA 인증서(`/etc/kubernetes/pki/ca.crt`)를 추가해야 함. 컨테이너 재생성(볼륨 마운트 추가) 필요 — 현재 `docker inspect keycloak`으로 기존 마운트/env 확인 대기 중.
-2. **Feature flag 활성화** — legacy V1 + FGAP:v1은 기본 꺼져 있음. Keycloak 컨테이너에 다음 env var 추가 후 재시작 필요:
-   ```
-   KC_FEATURES=token-exchange,admin-fine-grained-authz:v1
-   ```
-   (v2가 아니라 **v1** 명시 — v2는 token-exchange 권한 자체가 없음)
+~~1. TLS 신뢰~~, ~~2. Feature flag 활성화~~ — 2026-08-03 해소. `docker-compose.yaml`(`/home/ubuntu/keycloak/`)에 `KC_TRUSTSTORE_PATHS=/opt/keycloak/conf/truststore`(디렉터리 마운트, `./truststore/ca.crt` ← `/etc/kubernetes/pki/ca.crt`, uid 1000 읽기 위해 `chmod 644`)와 `KC_FEATURES=token-exchange,admin-fine-grained-authz:v1` 추가 후 `docker compose up -d`. 기동 로그로 확인 완료:
+
+```
+Preview features enabled: admin-fine-grained-authz:v1, token-exchange:v1
+Found the following truststore files under directories specified in the truststore paths [/opt/keycloak/conf/truststore/ca.crt]
+```
+
+~~3. apiserver JWKS 도달성~~ — 2026-08-03 해소, 단 진행 중 새 블로커 발견:
+
+Keycloak 컨테이너(uid 1000)엔 `curl`이 없어 (미니멀 base 이미지) 같은 `keycloak_default` 브리지 네트워크에 `curlimages/curl` 임시 컨테이너를 붙여 검증:
+
+```bash
+docker run --rm --network keycloak_default -v ~/keycloak/truststore/ca.crt:/ca.crt:ro \
+  curlimages/curl -sv --cacert /ca.crt https://192.168.0.21:6443/openid/v1/jwks
+```
+
+TLS(`--cacert ca.crt`)는 바로 통과했지만 `403 Forbidden: system:anonymous cannot get path "/openid/v1/jwks"` 발생.
+
+원인: K8s는 `/openid/v1/jwks`용 `system:service-account-issuer-discovery` ClusterRole을 기본 제공하지만, 기본 ClusterRoleBinding은 `system:serviceaccounts` 그룹에만 걸려 있고 **익명(`system:unauthenticated`)은 기본적으로 제외**됨 (`kubectl describe clusterrolebinding system:service-account-issuer-discovery`로 확인). 이 기본 바인딩엔 `rbac.authorization.kubernetes.io/autoupdate: true`가 붙어 있어 직접 편집하면 reconciler가 되돌리므로, **별도의 새 ClusterRoleBinding**으로 익명 접근을 추가하는 게 맞는 방법 (K8s 공식 문서가 권장하는 패턴이기도 함):
+
+```bash
+kubectl create clusterrolebinding service-account-issuer-discovery-anonymous \
+  --clusterrole=system:service-account-issuer-discovery \
+  --group=system:unauthenticated
+```
+
+**보안 트레이드오프 검토(회사 도입 검토 시 반드시 언급):** `system:unauthenticated`에 뭔가 바인딩하는 건 일반적으론 경계 대상 패턴이지만, 이 ClusterRole은 GET 2개 non-resource URL만 허용하고 응답 내용도 공개 목적의 서명 검증용 공개키(JWKS)라 비밀 유출 리스크는 낮음. 다만 "익명 접근 허용"이라는 패턴 자체의 확장 리스크, 그리고 apiserver가 홈랩보다 넓게 노출된 환경(사내 온프렘 등)일 때는 노출 표면이 커진다는 점은 인지 필요. 대안으로 JWKS를 한 번 받아 Keycloak IDP에 정적 등록(apiserver RBAC를 전혀 안 건드림, 대신 키 로테이션 시 수동 갱신 필요)하는 방법도 있음 — 이번엔 공식 권장 방식(익명 바인딩)으로 진행하기로 결정.
+
+적용 후 재검증 완료:
+```
+HTTP/2 200
+content-type: application/jwk-set+json
+{"keys":[{"use":"sig","kty":"RSA","kid":"1sPcP8rdyvGmFniWxZhyiSsnNo4460SdruktQxsCigo", ...}]}
+```
 
 ## 설정 단계 (V1 기준, 여전히 유효한 절차)
 
@@ -150,9 +186,10 @@ subject_issuer=k8s-cluster-home
 - [x] Keycloak 버전 확인 → 26.2.4 (단, 이건 V1 preview 여부와 무관 — 위 정정 참고)
 - [x] 클러스터 종류 확인 → 온프렘, kubeadm 3노드
 - [x] issuer/JWKS 접근성 확인 → 로컬(같은 호스트)에서 정상 응답, Keycloak도 같은 호스트라 네트워크 도달성 문제 없음
-- [ ] `docker inspect keycloak`로 기존 마운트/env 확인 (CA 인증서 추가 방법 결정용)
-- [ ] kubeadm CA 인증서(`/etc/kubernetes/pki/ca.crt`) 확보 및 Keycloak 컨테이너에 마운트 + `KC_TRUSTSTORE_PATHS` 설정
-- [ ] `KC_FEATURES=token-exchange,admin-fine-grained-authz:v1` 적용 후 컨테이너 재시작
+- [x] `docker inspect keycloak`로 기존 마운트/env 확인 → docker-compose 관리, uid 1000, 기존 바인드 마운트 3개(providers jar) 확인
+- [x] kubeadm CA 인증서(`/etc/kubernetes/pki/ca.crt`) 확보 및 Keycloak 컨테이너에 마운트 + `KC_TRUSTSTORE_PATHS` 설정 (2026-08-03)
+- [x] `KC_FEATURES=token-exchange,admin-fine-grained-authz:v1` 적용 후 컨테이너 재시작 (2026-08-03)
+- [x] apiserver JWKS 엔드포인트 outbound 도달성 확인 → TLS는 통과했으나 RBAC 403 발견, `system:service-account-issuer-discovery`를 `system:unauthenticated`에 추가 바인딩 후 200 확인 (2026-08-03)
 - [ ] IDP 등록 (`k8s-cluster-home`) → FGAP token-exchange 권한 부여 → 매퍼 구성 → 실제 토큰 교환 호출 테스트
 - [ ] 회사에 실제로 Vault/Secrets Manager가 있는지 확인 — 있다면 `client_secret` 자동 로테이션이 이미 더 검증된 대안일 수 있음 (홈랩 PoC라고 이 항목을 건너뛰면 안 됨, 회사 도입 검토의 핵심 비교 축)
 - [ ] PoC 결과를 회사에 보고할 때 "legacy V1(preview) + FGAP:v1(제거 가능성 명시됨)" 의존성을 결론에 반드시 포함
