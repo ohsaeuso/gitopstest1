@@ -2,6 +2,14 @@
 
 > 클라이언트가 정적 secret/private key 없이, K8s ServiceAccount 토큰으로 Keycloak client 인증을 수행하는 방법 정리.
 
+> ## ⚠️ 업데이트 (2026-08-08) — 아래 "방법 B 권장" 결론은 재검토 대상
+>
+> [keycloak-token-exchange.md](./keycloak-token-exchange.md)에서 방법 B(Token Exchange)를 실제로 끝까지 구현하다가, **K8s SA 토큰에 `typ` 헤더가 없어서 Keycloak 24.0.3+의 강화된 검증(RFC 9068)에 구조적으로 막힌다는 것**을 확인함 — 설정으로 해결 불가, 두 시스템 조합 자체의 비호환.
+>
+> 동시에, Keycloak이 그 사이 **"Federated Client Authentication"이라는 이름의 신규 네이티브 기능**을 26.4(preview)~26.6(GA)에 걸쳐 출시했다는 걸 발견함 — 이름이 이 문서 제목과 겹치지만 **별개의 구체적인 Keycloak 제품 기능**. 아래 "방법 A"가 2026-07-31 당시 "커스텀 SPI 필요해서 비권장"이라 결론 낸 바로 그 문제(iss/sub가 client_id와 안 맞음)를 **순정 기능으로 네이티브 해결**한 것으로 보임. 자세한 내용은 아래 "Federated Client Authentication — 신규 네이티브 기능" 섹션 참고.
+>
+> **현재 결론: 방법 B는 이 유스케이스에서 포기. 방법 A를 신규 네이티브 기능으로 재시도할 예정** (홈랩 Keycloak 26.2.4 → 26.7.1 업그레이드 필요, 아직 미실행).
+
 ## 배경
 
 Confidential client(백엔드 서비스)가 Keycloak에 자신을 인증하는 전통적 방식:
@@ -22,7 +30,9 @@ Confidential client(백엔드 서비스)가 Keycloak에 자신을 인증하는 �
 
 K8s 1.20+는 SA 토큰을 OIDC 호환 JWT로 발급, API 서버가 JWKS 엔드포인트(`/openid/v1/jwks`) 공개. Keycloak의 "Signed Jwt" client authenticator가 이 JWKS URL을 신뢰 소스로 쓰도록 설정.
 
-**한계:** Keycloak 기본 Signed Jwt 검증은 `iss`/`sub`가 client_id와 동일할 것을 기대. K8s SA 토큰의 `sub`(`system:serviceaccount:<ns>:<sa-name>`)는 그대로 안 맞아 **커스텀 Keycloak SPI(ClientAuthenticator)** 구현이 필요한 경우가 많음.
+**한계 (2026-07-31 당시 기준):** Keycloak 기본 Signed Jwt 검증은 `iss`/`sub`가 client_id와 동일할 것을 기대. K8s SA 토큰의 `sub`(`system:serviceaccount:<ns>:<sa-name>`)는 그대로 안 맞아 **커스텀 Keycloak SPI(ClientAuthenticator)** 구현이 필요한 경우가 많음.
+
+> **업데이트 (2026-08-08):** 이 한계는 Keycloak의 범용 "Signed Jwt" client authenticator(자기서명 모델, `iss==sub==client_id` 전제) 기준 얘기였음. Keycloak이 26.4~26.6에 걸쳐 **K8s ServiceAccount를 1급 시민으로 지원하는 별도의 "Federated Client Authentication" 기능**을 냈고, 이건 애초에 `iss`/`sub`가 client_id와 다른 워크로드 아이덴티티를 전제로 설계된 것으로 보여 이 한계가 해소됐을 가능성이 높음. 아래 "Federated Client Authentication — 신규 네이티브 기능" 섹션 참고. 아직 실습으로 검증은 안 됨.
 
 ### 방법 B: Token Exchange — 권장
 
@@ -32,13 +42,55 @@ K8s 1.20+는 SA 토큰을 OIDC 호환 JWT로 발급, API 서버가 JWKS 엔드�
 
 ## 비교
 
-| | 방법 A (Signed JWT + JWKS) | 방법 B (Token Exchange) |
-|---|---|---|
-| 순정 Keycloak으로 가능? | 제한적 (커스텀 SPI 필요 가능성 높음) | 대부분 표준 기능으로 커버 |
-| 매핑 유연성 | 낮음 | namespace/SA별 세밀한 role 매핑 가능 |
-| 운영 복잡도 | SPI 유지보수 부담 | Realm 설정 + 매핑 규칙 관리 |
+| | 방법 A — 구식 (Signed JWT + JWKS, 커스텀 SPI) | 방법 B (Token Exchange) | 방법 A' — 신규 (Federated Client Authentication, 26.6+ GA) |
+|---|---|---|---|
+| 순정 Keycloak으로 가능? | 제한적 (커스텀 SPI 필요 가능성 높음) | 대부분 표준 기능으로 커버 | **가능 (네이티브, SPI 불필요)** |
+| K8s SA 토큰의 `typ` 헤더 누락 영향 | 미확인 | **구조적 블로커 확인됨 (2026-08-08)** — 이 유스케이스 사용 불가 | 미확인 (다음 실습에서 검증 필요) |
+| 기능 상태 | 커스텀 코드라 Keycloak 버전 무관 (SPI 깨질 리스크는 별개) | **영구 preview** (legacy V1, FGAP:v1도 preview) | **26.6+ 부터 GA(supported)** |
+| 매핑 유연성 | 낮음 | namespace/SA별 세밀한 role 매핑 가능 | 미확인 (다음 실습에서 검증) |
+| 운영 복잡도 | SPI 유지보수 부담 | Realm 설정 + 매핑 규칙 관리 + FGAP 정책 | Realm 설정(IDP 등록 + 인증 flow 바인딩), SPI/FGAP 불필요 |
+| client_secret 필요 여부 | 불필요 (private key 대신 SA 토큰) | **필요** (client_secret으로 별도 클라이언트 인증) | **불필요** |
 
-**결론: 방법 B (Token Exchange) 권장.**
+**결론 (2026-08-08 갱신, 이전 "방법 B 권장" 결론을 대체): 방법 B는 이 유스케이스에서 포기 (구조적 블로커 확인). 방법 A'(Federated Client Authentication, GA 기능)를 유력 후보로 재검토 중 — 단, 홈랩에서 실제로 K8s SA 토큰의 `typ` 헤더 문제를 안 겪는지 등 핵심 가정이 아직 실습으로 검증되지 않았음.**
+
+## Federated Client Authentication — 신규 네이티브 기능 (2026-08-08 조사, 아직 미착수)
+
+Keycloak 제품이 실제로 "Federated client authentication"이라는 이름을 붙여 낸 기능. 이 문서 제목의 넓은 개념과 이름이 겹치지만, 여기서부터는 **구체적인 Keycloak 빌트인 기능**을 가리킴.
+
+### 버전 타임라인
+
+| 버전 | 상태 |
+|---|---|
+| 26.4 (2025-09) | Federated Client Authentication 일반 기능 preview 도입 |
+| 26.5 (2026-01) | K8s Service Account 지원 preview 추가 |
+| **26.6 (2026-04)** | **K8s Service Account 포함 GA(supported)로 승격.** SPIFFE 클라이언트 인증은 여전히 preview(스펙 미확정) |
+| 26.7.1 (2026-08-05, 최신) | 이후 릴리스, 세부 개선 포함 (아직 릴리스노트 상세 미확인) |
+
+우리 홈랩은 **26.2.4** — 이 기능 자체가 없는 버전. 최소 26.6, 가급적 최신인 26.7.1로 업그레이드해야 시도 가능.
+
+### 동작 방식 (요약, 검색 스니펫 기준 — 공식 문서 원문 정독 필요)
+
+1. 지금 Token Exchange에서 한 것과 유사하게, **K8s 클러스터를 realm의 Identity Provider로 등록**해서 신뢰 관계를 맺음 (이 부분은 재사용 가능해 보임).
+2. `client_credentials` 인증 흐름(authentication flow)에 **"Signed-JWT federated" execution**을 바인딩. (최신 버전은 기본 바인딩되어 있을 수 있고, 업그레이드 케이스는 flow를 복제해서 execution을 수동 추가해야 할 수 있음 — 확인 필요.)
+3. 클라이언트는 K8s가 자동으로 마운트해주는 SA JWT를 **client_assertion**으로 사용해 `client_credentials` grant를 호출. `subject_token`/`token-exchange` grant 자체가 필요 없음.
+4. Keycloak이 SA JWT 검증을 위해 `<issuer>/.well-known/openid-configuration` (OIDC discovery 문서)에 도달할 수 있어야 함 — 지금까지 쓰던 `jwksUrl` 직접 지정 방식과 다름. 우리 클러스터에서 이 엔드포인트가 outbound로 도달 가능한지, RBAC(`/openid/v1/jwks` 때와 같은 익명 접근 403 이슈)가 또 걸리는지 **다음 실습에서 확인 필요**.
+
+### 열린 질문 (다음 실습에서 검증해야 할 것)
+
+- [ ] `typ` 헤더 없는 K8s SA 토큰을 이 경로에서도 거부하는가, 아니면 이 기능은 K8s SA 토큰 형태를 전제로 설계되어 문제없이 통과하는가 — **오늘 겪은 블로커가 재발하는지가 이 피벗의 성패를 가르는 핵심 질문.**
+- [ ] `.well-known/openid-configuration` 엔드포인트의 outbound 도달성/RBAC 확인 (K8s는 이 엔드포인트도 기본 제공하지만, 우리 환경에서 실제 노출/권한 상태는 미확인).
+- [ ] namespace/SA별 role 매핑을 방법 B의 IDP Mapper만큼 세밀하게 할 수 있는지 (Hardcoded Role/Attribute mapper와 동등한 기능이 이 흐름에도 있는지).
+- [ ] 관련 이슈 [#47067 "Support Pod-level workload identity"](https://github.com/keycloak/keycloak/issues/47067)가 아직 열려있다는 건 pod 단위 세밀한 identity 매핑이 완전히 성숙하지 않았을 가능성을 시사 — 확인 필요.
+- [ ] 기존 realm(`k8s-token-exchange-poc`)에 남아있는 IDP/client/mapper 설정이 업그레이드 후에도 그대로 재사용 가능한지, 아니면 이 기능 전용으로 새로 정리해야 하는지.
+
+### 출처
+
+- [Federated client authentication - no more secrets - Keycloak](https://www.keycloak.org/2026/01/federated-client-authentication)
+- [Keycloak 26.6.0 released](https://www.keycloak.org/2026/04/keycloak-2660-released)
+- [Keycloak 26.7.1 released](https://www.keycloak.org/2026/08/keycloak-2671-released)
+- [Issue #37600 — Experimental support for authenticating clients with Kubernetes Service Accounts](https://github.com/keycloak/keycloak/issues/37600)
+- [Issue #44064 — Kubernetes service account default for federated client authentication](https://github.com/keycloak/keycloak/issues/44064)
+- [Issue #47067 — Support Pod-level workload identity for Kubernetes federated JWT client authentication](https://github.com/keycloak/keycloak/issues/47067)
 
 ## 테스트
 
@@ -153,3 +205,4 @@ Keycloak 내장 Signed Jwt 검증기는 RFC 7523의 **자기 서명 모델**(`is
 2. 복잡도가 없어지는 게 아니라 이동함 — 이미 Vault 등으로 secret 자동 로테이션이 돌아가는 조직이면, Token Exchange로 갈아타는 순간 IDP 등록·매퍼·FGAP 정책이라는 새 관리 대상이 생기는 것뿐.
 3. 벤더 락인 — IDP 브로커링 + FGAP + Token Exchange 조합은 Keycloak 특화 구성.
 4. 감사·팀 숙련도 비용 — "SA 토큰을 외부 IdP로 등록해 교환"하는 흐름은 생소해 매번 설명 필요.
+5. **(2026-08-08 실습으로 확인) 순정 K8s SA 토큰은 애초에 이 경로를 통과 못 함** — `typ` 헤더가 없어서 Keycloak 24.0.3+의 강화된 subject_token 검증에 걸림. 위 1~4번은 "쓸 수는 있지만 도입을 망설이게 되는 이유"였던 반면, 이건 "이 조합으로는 애초에 안 됨"이라는 더 강한 결론. 위 4가지 이유 중 상당수(1, 3, 4번)를 회피하면서 typ 문제도 없을 가능성이 있는 대체 경로 → 아래 "Federated Client Authentication — 신규 네이티브 기능" 섹션 참고.

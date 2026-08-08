@@ -4,6 +4,12 @@
 >
 > 손 움직이기 전에 잡아둔 배경 개념(Feature Flag/IDP/FGAP/Mapper)은 **[keycloak-concepts.md](./keycloak-concepts.md)** 참고.
 
+> ## ⛔ 상태 업데이트 (2026-08-08) — 이 경로(방법 B) 구조적으로 막힘, 방법 A 재검토로 피벗
+>
+> Mapper까지는 CLI 우회로 성공적으로 만들었으나, 실제 토큰 교환 호출에서 **K8s SA JWT에 `typ` 헤더가 없다는 이유로 구조적으로 막힘**을 확인함 (아래 "남은 실제 블로커" 4번 참고). 설정으로 우회 불가 — Keycloak 24.0.3+ 전 버전이 동일하게 막힘.
+>
+> 동시에 **Keycloak이 26.6부터 GA로 지원하는 신규 "Federated Client Authentication"(K8s Service Account 지원) 기능**을 발견 — 이게 바로 [keycloak-federated-client-auth.md](./keycloak-federated-client-auth.md)의 "방법 A"를 커스텀 SPI 없이 네이티브로 구현한 것으로 보임. 자세한 내용과 다음 단계는 그 문서의 "업데이트 (2026-08-08)" 섹션 참고. **이 문서(방법 B)의 실습은 여기서 일시 중단**, 홈랩 Keycloak을 26.7.1로 업그레이드한 뒤 방법 A(신규 기능)로 재시도할 예정.
+
 ## 참고한 공식 문서
 
 - [Kubernetes: Configure Service Accounts for Pods](https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/) — projected SA token, `ServiceAccountIssuerDiscovery`
@@ -109,7 +115,33 @@ content-type: application/jwk-set+json
 {"keys":[{"use":"sig","kty":"RSA","kid":"1sPcP8rdyvGmFniWxZhyiSsnNo4460SdruktQxsCigo", ...}]}
 ```
 
-## 설정 단계 (V1 기준, 여전히 유효한 절차)
+**4. `typ` 헤더 누락 — 구조적 블로커, 설정으로 해결 불가 (2026-08-08, 미해결·경로 포기)**
+
+client_secret 인증, IDP validateSignature, mapper까지 다 맞춘 뒤 실제 토큰 교환(`grant_type=...token-exchange`) 호출 시 계속 다음 에러:
+
+```json
+{ "error": "invalid_token", "error_description": "token type not supported" }
+```
+
+`requested_token_type` 파라미터를 명시해도 동일 — subject_token_type/requested_token_type 파라미터 문제가 아니라 **subject_token(JWT) 자체를 파싱하는 단계**에서 거부되는 것으로 확인. JWT 헤더를 직접 디코드해보면:
+
+```json
+{ "alg": "RS256", "kid": "1sPcP8rdyvGmFniWxZhyiSsnNo4460SdruktQxsCigo" }
+```
+
+**`typ` 클레임이 아예 없음.** 원인(웹 검색으로 확인, 아래 출처):
+
+- Keycloak **24.0.3부터** RFC 9068 기준으로 token exchange의 subject_token에 `typ` 헤더 클레임을 요구하도록 검증이 강화됨. 22.0.4 이하에서는 없어도 통과했음.
+- **K8s apiserver의 내장 ServiceAccount 토큰 발급기는 애초에 `typ` 헤더를 넣지 않음** (`kubectl create token`으로 발급되는 모든 토큰이 동일). 클러스터 설정으로 바꿀 수 있는 옵션이 아님 — 커스텀 토큰 발급기(별도 signer)를 붙이지 않는 한 K8s 쪽에서 고칠 수 없음.
+- 즉 **24.0.3 이후 모든 Keycloak 버전(26.2.4, 26.7.1 포함)에서, 순정 K8s SA 토큰을 그대로 legacy V1 token exchange의 subject_token으로 쓰는 것 자체가 막혀 있음.** 우리 환경만의 설정 문제가 아니라 두 시스템 조합 자체의 구조적 비호환.
+
+**출처:**
+- ["token exchange" feature in Red Hat build of Keycloak not working when JWT token doesn't contain a "typ" header claim](https://access.redhat.com/solutions/7115095)
+- [EntraID/AzurAD Application Token-Exchange fails due to incorrect supported token type check · Issue #37734](https://github.com/keycloak/keycloak/issues/37734)
+
+**결정 (2026-08-08):** 이 블로커를 우회하는 대신, 방법 B(Token Exchange) 자체를 이 유스케이스에서 포기하고 방법 A의 네이티브 구현(신규 "Federated Client Authentication" 기능, Keycloak 26.6+ GA)으로 피벗하기로 함. 자세한 내용은 [keycloak-federated-client-auth.md](./keycloak-federated-client-auth.md) 참고. 이 문서에 남은 "설정 단계"/"TODO"는 **참고용으로 보존**하되 더 이상 실습을 진행하지 않음.
+
+## 설정 단계 (V1 기준, 여전히 유효한 절차 — 단, 위 4번 블로커로 인해 현재 이 유스케이스엔 사용 불가. 기록 보존 목적)
 
 **1. K8s 쪽 — audience 지정된 projected SA token**
 
@@ -135,24 +167,49 @@ spec:
 **2. Keycloak — K8s 클러스터를 Identity Provider(OIDC)로 등록**
 
 ```bash
-kcadm.sh create identity-provider/instances -r ecommerce \
+kcadm.sh create identity-provider/instances -r k8s-token-exchange-poc \
   -s alias=k8s-cluster-home \
   -s providerId=oidc \
   -s enabled=true \
   -s config.issuer=https://kubernetes.default.svc.cluster.local \
   -s config.jwksUrl=https://192.168.0.21:6443/openid/v1/jwks \
   -s config.useJwksUrl=true \
+  -s config.validateSignature=true \
   -s config.clientAuthentication=none
 ```
 
-**3. 해당 IDP에 Token Exchange 권한 부여** (FGAP:v1 활성화 후)
+> **정정 (2026-08-08):** 원래 이 명령엔 `config.validateSignature=true`가 빠져 있었음. `jwksUrl`/`useJwksUrl`만으로는 서명 검증이 실제로 켜지지 않아 subject_token 검증 단계에서 `invalid_token`("token type not supported" 이전 단계 에러)이 발생했음 — 실습 중 `kcadm.sh update identity-provider/instances/k8s-cluster-home -r k8s-token-exchange-poc -s config.validateSignature=true`로 사후 적용해서 확인함. 위 명령은 정정 반영된 버전.
+
+**3. 토큰 교환을 실제로 호출할 confidential 클라이언트 생성** (2026-08-06 생성)
+
+```bash
+docker exec -it keycloak /opt/keycloak/bin/kcadm.sh create clients -r k8s-token-exchange-poc \
+  -s clientId=token-exchange-client \
+  -s enabled=true \
+  -s publicClient=false \
+  -s serviceAccountsEnabled=true \
+  -s standardFlowEnabled=false \
+  -s directAccessGrantsEnabled=false
+```
+
+시크릿 확인:
+
+```bash
+docker exec -it keycloak /opt/keycloak/bin/kcadm.sh get clients -r k8s-token-exchange-poc \
+  -q clientId=token-exchange-client -F id
+
+docker exec -it keycloak /opt/keycloak/bin/kcadm.sh get clients/<위에서_나온_id>/client-secret \
+  -r k8s-token-exchange-poc
+```
+
+**4. 해당 IDP에 Token Exchange 권한 부여** (FGAP:v1 활성화 후, `token-exchange-client`를 허용 대상으로 지정)
 
 ```
 Identity Providers → k8s-cluster-home → Permissions → Enabled: ON
-→ "token-exchange" permission → Policy에 대상 클라이언트 허용 추가
+→ "token-exchange" permission → Policy에 token-exchange-client 허용 추가
 ```
 
-**4. IDP Mapper로 SA 클레임 → role/attribute 매핑**
+**5. IDP Mapper로 SA 클레임 → role/attribute 매핑**
 
 SA 토큰 클레임 예시:
 
@@ -170,12 +227,25 @@ SA 토큰 클레임 예시:
 
 특정 네임스페이스/SA만 원하는 role을 받도록 조건부 Attribute/Hardcoded Role mapper 구성.
 
-**5. 클라이언트 호출**
+> **Admin Console UI 버그 우회 (2026-08-08):** Console의 "Add Identity Provider Mapper" 화면에서 Hardcoded Role 매퍼의 Role 검색창에 미리 만들어둔 realm role(`poc-workload`)이 안 뜨는 버그 발견 (role 자체는 `kcadm.sh get roles`로 realm에 정상 존재 확인됨 — `clientRole: false`, 올바른 `containerId`). 필터 토글도 문제 아니었음. 원인 특정은 못했으나, Console UI를 완전히 우회해서 REST/CLI로 mapper를 직접 생성해 해결:
+>
+> ```bash
+> docker exec -it keycloak /opt/keycloak/bin/kcadm.sh create identity-provider/instances/k8s-cluster-home/mappers -r k8s-token-exchange-poc \
+>   -s name=hardcoded-role-mapper \
+>   -s identityProviderAlias=k8s-cluster-home \
+>   -s identityProviderMapper=oidc-hardcoded-role-idp-mapper \
+>   -s config.role=poc-workload
+> ```
+>
+> mapper 생성 자체는 성공(`Created new mapper with id '...'`). Console UI에 실제로 나타나는지까지는 확인 안 하고 다음 블로커(아래 4번)로 넘어감.
+
+**6. 클라이언트 호출**
 
 ```
-POST /realms/ecommerce/protocol/openid-connect/token
+POST /realms/k8s-token-exchange-poc/protocol/openid-connect/token
 grant_type=urn:ietf:params:oauth:grant-type:token-exchange
-client_id=<client-id>
+client_id=token-exchange-client
+client_secret=<3번에서 확인한 시크릿>
 subject_token=<K8s SA JWT>
 subject_token_type=urn:ietf:params:oauth:token-type:jwt
 subject_issuer=k8s-cluster-home
@@ -190,6 +260,15 @@ subject_issuer=k8s-cluster-home
 - [x] kubeadm CA 인증서(`/etc/kubernetes/pki/ca.crt`) 확보 및 Keycloak 컨테이너에 마운트 + `KC_TRUSTSTORE_PATHS` 설정 (2026-08-03)
 - [x] `KC_FEATURES=token-exchange,admin-fine-grained-authz:v1` 적용 후 컨테이너 재시작 (2026-08-03)
 - [x] apiserver JWKS 엔드포인트 outbound 도달성 확인 → TLS는 통과했으나 RBAC 403 발견, `system:service-account-issuer-discovery`를 `system:unauthenticated`에 추가 바인딩 후 200 확인 (2026-08-03)
-- [ ] IDP 등록 (`k8s-cluster-home`) → FGAP token-exchange 권한 부여 → 매퍼 구성 → 실제 토큰 교환 호출 테스트
-- [ ] 회사에 실제로 Vault/Secrets Manager가 있는지 확인 — 있다면 `client_secret` 자동 로테이션이 이미 더 검증된 대안일 수 있음 (홈랩 PoC라고 이 항목을 건너뛰면 안 됨, 회사 도입 검토의 핵심 비교 축)
-- [ ] PoC 결과를 회사에 보고할 때 "legacy V1(preview) + FGAP:v1(제거 가능성 명시됨)" 의존성을 결론에 반드시 포함
+- [x] realm 확인 (2026-08-06) → 문서에 있던 `ecommerce` 가정은 틀림. 실제 Admin Console 기준 기존 realm은 `master`(Keycloak 기본), `realm1`(이전 다른 실습용, 이번 PoC와 무관) 두 개뿐이었음. 이번 PoC 전용으로 Admin Console에서 새 realm `k8s-token-exchange-poc` 생성 완료. 위 "설정 단계"의 `-r ecommerce` / `/realms/ecommerce/...` 예시는 모두 `k8s-token-exchange-poc`로 정정함.
+- [x] IDP 등록 (`k8s-cluster-home`, realm=`k8s-token-exchange-poc`) — kcadm.sh로 생성 완료 (2026-08-06)
+- [x] confidential 클라이언트 생성 (`token-exchange-client`, service account 활성화) (2026-08-06)
+- [x] FGAP token-exchange 권한 부여 — Console에서 Identity Providers → k8s-cluster-home → Permissions → Enabled ON, `Client` 타입 정책 `allow-token-exchange-client` 생성 후 `token-exchange.permission.idp` / `token-exchange.permission.client` 두 permission 모두에 바인딩 (2026-08-06)
+- [x] 테스트용 K8s 리소스 준비 (2026-08-06) — namespace `token-exchange-poc`, SA `keycloak-test-sa`, `kubectl create token keycloak-test-sa -n token-exchange-poc --audience=keycloak --duration=1h`로 테스트용 JWT 발급 (pod 배포 없이 K8s 1.24+ 기능으로 직접 발급, 값은 기록 안 함)
+- [x] realm role `poc-workload` 생성 (kcadm.sh, 2026-08-06) — `get roles -r k8s-token-exchange-poc -F name`로 존재 확인됨
+- [x] **블로커 (2026-08-06) 해결 (2026-08-08)**: Console의 IDP Mapper 화면에서 `poc-workload` role이 검색 안 되던 문제 — 원인 미특정, Console UI를 우회해서 `kcadm.sh create identity-provider/instances/k8s-cluster-home/mappers`로 mapper 직접 생성해서 해결 (위 "설정 단계" 5번 참고).
+- [x] `config.validateSignature=true` 누락 발견 및 적용 (2026-08-08) — 원래 IDP 등록 명령에 빠져 있었음 (위 "설정 단계" 2번 정정 참고).
+- [x] 실제 토큰 교환 호출 테스트 (2026-08-08) → **구조적 블로커로 실패, 경로 포기**: K8s SA JWT에 `typ` 헤더가 없어서 Keycloak 24.0.3+의 강화된 RFC 9068 검증에 걸림 (위 "남은 실제 블로커" 4번 참고). 설정으로 해결 불가능한 것으로 결론.
+- [x] 회사에 실제로 Vault/Secrets Manager가 있는지 확인하는 항목은 → 아래 대체 경로(Federated Client Auth)에서는 **애초에 secret 자체가 없어져서** 이 비교축 자체가 무의미해질 가능성 있음. 대체 경로가 실제로 검증되면 이 TODO는 폐기 예정, 아직은 보류.
+- [x] PoC 결과를 회사에 보고할 때 "legacy V1(preview) + FGAP:v1(제거 가능성 명시됨)" 의존성을 결론에 반드시 포함 → **이 항목은 방법 B 자체를 포기했으므로 "왜 포기했는지"의 근거로 보고서에 남기면 됨** (preview 리스크 + typ 헤더 구조적 비호환 둘 다).
+- [ ] **다음 단계 (2026-08-08 결정)**: 이 문서의 실습은 여기서 중단. 홈랩 Keycloak을 26.2.4 → 26.7.1로 업그레이드한 뒤, [keycloak-federated-client-auth.md](./keycloak-federated-client-auth.md)의 "Federated Client Authentication (신규 네이티브 기능)" 섹션 기준으로 방법 A를 처음부터 다시 시도. 업그레이드 자체가 기존 realm/client/IDP 설정에 미치는 영향은 사전 확인 필요 (아직 미확인 — 사용자 확인 대기 중이었음).
